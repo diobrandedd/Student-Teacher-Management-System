@@ -1,0 +1,6 @@
+{
+  "files": ["public/index.php"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

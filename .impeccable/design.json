@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-05T06:39:00Z",
+  "title": "Design System: SSIS",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Institutional Teal-Green",
+        "canonical": "#176b52",
+        "tonalRamp": ["#0b402e", "#10513d", "#176b52", "#237d60", "#4a9a7a", "#7fbfa3", "#cce7da", "#eaf5ef"]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "Office Canopy",
+        "canonical": "#10513d",
+        "tonalRamp": ["#082e22", "#0b402e", "#10513d", "#176b52", "#3d8a6e", "#7fbfa3", "#cce7da", "#f0f5f2"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Records Charcoal-Green",
+        "canonical": "#21352e",
+        "tonalRamp": ["#13281f", "#21352e", "#344e3f", "#45574d", "#596960", "#9aaea2", "#d7e0db", "#f4f6f5"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Quiet Clinic Paper",
+        "canonical": "#f4f6f5",
+        "tonalRamp": ["#45574d", "#9aaea2", "#d7e0db", "#e3e9e5", "#edf2ef", "#f0f5f2", "#f4f6f5", "#ffffff"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Pale Partition",
+        "canonical": "#d7e0db",
+        "tonalRamp": ["#617e6e", "#9aada0", "#a5b5ab", "#badac9", "#d7e0db", "#e3e9e5", "#edf2ef", "#f4f6f5"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#d7e0db", "#e3e9e5", "#edf2ef", "#f0f5f2", "#f4f6f5", "#f7faf8", "#fafcfb", "#ffffff"]
+      },
+      "error-ink": {
+        "role": "secondary",
+        "displayName": "Error Ink",
+        "canonical": "#8b2721",
+        "tonalRamp": ["#7e1b1b", "#8b2721", "#a12626", "#c45a52", "#ebc3be", "#fff0ee", "#fff7f6", "#ffffff"]
+      },
+      "notice-ink": {
+        "role": "tertiary",
+        "displayName": "Notice Ink",
+        "canonical": "#214e37",
+        "tonalRamp": ["#12533e", "#214e37", "#176b52", "#4a9a7a", "#badac9", "#e5f1eb", "#eaf5ef", "#f4f6f5"]
+      }
+    },
+    "typographyMeta": {
+      "brand": { "displayName": "Brand", "purpose": "Header product wordmark Secure Student IS." },
+      "headline": { "displayName": "Headline", "purpose": "Page titles (h1)." },
+      "title": { "displayName": "Title", "purpose": "Section and dialog titles (h2)." },
+      "body": { "displayName": "Body", "purpose": "Default copy and field text." },
+      "label": { "displayName": "Label", "purpose": "Form labels and button text." },
+      "nav": { "displayName": "Nav", "purpose": "Main navigation links." },
+      "muted": { "displayName": "Muted", "purpose": "Helper and empty-state supporting copy." },
+      "table": { "displayName": "Table", "purpose": "Tabular record data." },
+      "table-head": { "displayName": "Table head", "purpose": "Column headers." },
+      "badge": { "displayName": "Badge", "purpose": "Role and status chips." },
+      "stat": { "displayName": "Stat", "purpose": "Dashboard count figures." }
+    },
+    "shadows": [
+      {
+        "name": "dialog-lift",
+        "value": "0 24px 80px #12291f40",
+        "purpose": "Only structural elevation — native dialog editors over the page."
+      }
+    ],
+    "motion": [
+      {
+        "name": "busy-opacity",
+        "value": "opacity .7 with cursor progress",
+        "purpose": "Async editor-fetch affordance on links with aria-busy=true; no decorative motion vocabulary."
+      }
+    ],
+    "breakpoints": [
+      { "name": "nav-wrap", "value": "900px" },
+      { "name": "compact", "value": "600px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main proceed action — Institutional Teal-Green fill, 44px tall.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Sign in</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: #176b52; color: #fff; border: 1px solid transparent; padding: 10px 18px; border-radius: 6px; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-btn-primary:hover { background: #10513d; } .ds-btn-primary:active { background: #0b402e; } .ds-btn-primary:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; } .ds-btn-primary:disabled { background: #e3e9e5; color: #596960; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Cancel and secondary actions on white with sage border.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: #fff; color: #344e3f; border: 1px solid #a5b5ab; padding: 10px 18px; border-radius: 6px; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { background: #edf3ef; } .ds-btn-secondary:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive confirms only — reserved red.",
+      "html": "<button class=\"ds-btn-danger\" type=\"button\">Deactivate</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: #a12626; color: #fff; border: 1px solid transparent; padding: 10px 18px; border-radius: 6px; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-btn-danger:hover { background: #7e1b1b; } .ds-btn-danger:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Standard form control with sage border and green focus ring.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Username</span><input class=\"ds-input\" type=\"text\" placeholder=\"Authorized account\" /></label>",
+      "css": ".ds-field { display: block; font: 400 16px/1.5 Arial, sans-serif; color: #21352e; } .ds-field-label { display: block; font-size: 14px; font-weight: 700; margin: 0 0 7px; } .ds-input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #9aada0; border-radius: 6px; color: #21352e; background: #fff; caret-color: #176b52; font: inherit; } .ds-input::placeholder { color: #647269; opacity: 1; } .ds-input:hover { border-color: #617e6e; } .ds-input:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; }"
+    },
+    {
+      "name": "Main Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link-current",
+      "description": "Header nav chips with mint current-page state.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main\"><a class=\"ds-nav-link\" href=\"#\">Dashboard</a><a class=\"ds-nav-link is-current\" href=\"#\" aria-current=\"page\">Students</a><a class=\"ds-nav-link\" href=\"#\">Blocks</a></nav>",
+      "css": ".ds-nav { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font: 400 14px/1.5 Arial, sans-serif; } .ds-nav-link { display: inline-flex; min-height: 44px; align-items: center; padding: 9px 12px; color: #45574d; text-decoration: none; border-radius: 6px; } .ds-nav-link:hover { background: #f0f5f2; color: #176b52; } .ds-nav-link.is-current { background: #e5f1eb; color: #12533e; font-weight: 700; } .ds-nav-link:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; }"
+    },
+    {
+      "name": "Role Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Compact role/status chip beside signed-in identity.",
+      "html": "<span class=\"ds-badge\">admin</span>",
+      "css": ".ds-badge { display: inline-block; font: 400 12px/1.5 Arial, sans-serif; padding: 4px 9px; border-radius: 6px; background: #e6eee9; color: #3e5748; vertical-align: middle; }"
+    },
+    {
+      "name": "Record Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat white container for forms and academic summaries.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">My academic information</h2><p class=\"ds-card-body\">BSIT, Year 3 · Active · GPA: Not recorded</p></section>",
+      "css": ".ds-card { background: #fff; border: 1px solid #d7e0db; border-radius: 12px; padding: 28px; color: #21352e; font: 400 16px/1.5 Arial, sans-serif; } .ds-card-title { margin: 0 0 14px; font-size: 19px; font-weight: 700; line-height: 1.35; } .ds-card-body { margin: 0; }"
+    },
+    {
+      "name": "Success Notice",
+      "kind": "custom",
+      "refersTo": "notice-success",
+      "description": "Flash and success feedback banner.",
+      "html": "<div class=\"ds-notice\" role=\"status\">Student record saved.</div>",
+      "css": ".ds-notice { padding: 16px 20px; border: 1px solid #badac9; border-radius: 8px; background: #eaf5ef; color: #214e37; font: 400 16px/1.5 Arial, sans-serif; }"
+    },
+    {
+      "name": "Error Notice",
+      "kind": "custom",
+      "refersTo": "notice-error",
+      "description": "Alert banner for auth and validation failures.",
+      "html": "<div class=\"ds-notice-error\" role=\"alert\">Invalid credentials or account unavailable.</div>",
+      "css": ".ds-notice-error { padding: 16px 20px; border: 1px solid #ebc3be; border-radius: 8px; background: #fff0ee; color: #8b2721; font: 400 16px/1.5 Arial, sans-serif; }"
+    },
+    {
+      "name": "Editor Dialog",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Signature lifted editor sheet — only surface that uses shadow.",
+      "html": "<div class=\"ds-dialog\" role=\"dialog\" aria-labelledby=\"ds-dialog-title\"><div class=\"ds-dialog-bar\"><h2 id=\"ds-dialog-title\" class=\"ds-dialog-title\">Add student</h2><button type=\"button\" class=\"ds-dialog-close\" aria-label=\"Close\">×</button></div><p class=\"ds-dialog-body\">Course, identity, and contact fields follow.</p><div class=\"ds-dialog-actions\"><button type=\"button\" class=\"ds-btn-primary\">Create student</button><button type=\"button\" class=\"ds-btn-secondary\">Cancel</button></div></div>",
+      "css": ".ds-dialog { width: min(480px, 100%); background: #fff; color: #21352e; border-radius: 12px; padding: 28px; box-shadow: 0 24px 80px #12291f40; font: 400 16px/1.5 Arial, sans-serif; } .ds-dialog-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; } .ds-dialog-title { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.35; } .ds-dialog-close { width: 44px; min-height: 44px; padding: 6px; font-size: 24px; line-height: 1; background: #fff; color: #344e3f; border: 1px solid #a5b5ab; border-radius: 6px; cursor: pointer; } .ds-dialog-close:hover { background: #edf3ef; } .ds-dialog-close:focus-visible { outline: 3px solid #237d60; outline-offset: 3px; } .ds-dialog-body { margin: 0 0 24px; } .ds-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 18px; border-top: 1px solid #d7e0db; } .ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: #176b52; color: #fff; border: 1px solid transparent; padding: 10px 18px; border-radius: 6px; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-btn-primary:hover { background: #10513d; } .ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: #fff; color: #344e3f; border: 1px solid #a5b5ab; padding: 10px 18px; border-radius: 6px; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { background: #edf3ef; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Campus Gate",
+    "overview": "SSIS looks like a warm school-office gate, not a marketing site and not a dark security console. Staff pass through a clear institutional entry, then work on quiet paper-like surfaces where records, tables, and forms do the talking. The green accent means proceed and belong; mint washes mark status and selection without turning playful.\n\nThe system stays approachable and human while remaining formal. Density favors registrar speed: readable tables, bold labels, 44px controls, and dialogs that lift only when editing. Surfaces stay flat at rest so scan paths stay calm.",
+    "keyCharacteristics": [
+      "Soft institutional green on cool mint paper",
+      "Flat tonal layering; dialog is the only lifted surface",
+      "Bold 14px action/label type on Arial UI stack",
+      "6px controls, 12px cards/dialogs, mint current-nav and selection",
+      "Role-aware chrome without decorative dashboard noise"
+    ],
+    "rules": [
+      {
+        "name": "The One Gate Accent Rule",
+        "body": "Institutional Teal-Green is for actions, links, focus, and brand — not for large fills, hero gradients, or decorative panels. Mint washes carry status; green carries intent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Soft Partition Rule",
+        "body": "Prefer Pale Partition and tonal mint over heavy chrome borders. Partition records; don’t cage them.",
+        "section": "colors"
+      },
+      {
+        "name": "The Weight-Over-Ornament Rule",
+        "body": "Emphasize with weight and size, never with decorative type, all-caps marketing labels, or a second display family unless product branding explicitly changes.",
+        "section": "typography"
+      },
+      {
+        "name": "The Work-Lane Rule",
+        "body": "Keep primary records work inside the 1184px lane. Do not introduce full-bleed marketing bands or side-panel heroes into Operate screens.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest. Shadows appear only when a dialog must leave the page plane. Do not add drop shadows to cards, stats, or nav.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Soft Rect Rule",
+        "body": "Prefer 6–12px radii. Avoid fully rounded pills, floating circular FABs, and hard-offset “brutal” cards.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep Institutional Teal-Green for actions, links, focus, and brand ink only.",
+      "Do use flat cards/tables with Pale Partition borders and mint washes for status/selection.",
+      "Do preserve 44px minimum hit targets on buttons, nav, and table actions.",
+      "Do lift only dialogs (dialog shadow + scrim); leave other surfaces flat.",
+      "Do collapse the form grid and stats to a single column at 600px."
+    ],
+    "donts": [
+      "Don’t introduce purple/indigo SaaS gradients, glow accents, or dark-mode shells.",
+      "Don’t add ambient shadows under cards, stats, or the header.",
+      "Don’t use pill-full radii, floating badge stickers, or icon-tile marketing headers.",
+      "Don’t invent school logos, testimonials, or support contacts in chrome — school name comes from settings.",
+      "Don’t replace role-aware nav with a generic mega-menu or dashboard widget wall."
+    ]
+  }
+}

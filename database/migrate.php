@@ -1,0 +1,124 @@
+<?php
+declare(strict_types=1);
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+require dirname(__DIR__) . '/app/bootstrap.php';
+db()->exec(file_get_contents(__DIR__ . '/migrations/2026_09_05_add_blocks.sql'));
+foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_add_academic_catalogs.sql')) as $sql) {
+    $sql=trim($sql);
+    if ($sql==='') continue;
+    if (preg_match('/^ALTER TABLE (students|teachers) ADD COLUMN IF NOT EXISTS (course_id|department_id)/', $sql, $match)) {
+        $check=db()->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+        $check->execute([$match[1],$match[2]]);
+        if ((int)$check->fetchColumn()) continue;
+        $sql=str_replace('ADD COLUMN IF NOT EXISTS','ADD COLUMN',$sql);
+    }
+    db()->exec($sql);
+}
+foreach (['students'=>['fk_students_course','course_id','courses'], 'teachers'=>['fk_teachers_department','department_id','departments']] as $table=>$relation) {
+    [$constraint,$column,$target] = $relation;
+    $check = db()->prepare('SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND CONSTRAINT_NAME=?');
+    $check->execute([$table,$constraint]);
+    if (!(int)$check->fetchColumn()) db()->exec("ALTER TABLE $table ADD CONSTRAINT $constraint FOREIGN KEY ($column) REFERENCES $target(id) ON DELETE RESTRICT");
+}
+foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_teacher_profile.sql')) as $sql) {
+    $sql = trim(preg_replace('/^--.*$/m', '', $sql) ?? '');
+    if ($sql === '') continue;
+    if (preg_match('/^ALTER TABLE teachers ADD COLUMN (\w+)/', $sql, $match)) {
+        $check = db()->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+        $check->execute(['teachers', $match[1]]);
+        if ((int)$check->fetchColumn()) continue;
+    }
+    db()->exec($sql);
+}
+$backfill = db()->query("SELECT t.id, u.full_name FROM teachers t JOIN users u ON u.id=t.user_id WHERE (t.first_name IS NULL OR t.first_name='') AND (t.last_name IS NULL OR t.last_name='')");
+foreach ($backfill as $row) {
+    [$first, $middle, $last] = split_person_name((string)$row['full_name']);
+    db()->prepare('UPDATE teachers SET first_name=?, middle_name=?, last_name=? WHERE id=?')->execute([$first, $middle !== '' ? $middle : null, $last, $row['id']]);
+}
+$mcp = db()->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+$mcp->execute(['users', 'must_change_password']);
+if (!(int)$mcp->fetchColumn()) {
+    db()->exec('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE');
+}
+
+$tables = db()->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('block_subject_assignments','block_subject_enrollments')")->fetchAll(PDO::FETCH_COLUMN);
+if (!in_array('block_subject_assignments', $tables, true)) {
+    foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_block_subjects.sql')) as $sql) {
+        $sql = trim($sql);
+        if ($sql !== '') db()->exec($sql);
+    }
+}
+
+$col = db()->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+$col->execute(['blocks', 'teacher_id']);
+if ((int)$col->fetchColumn()) {
+    $legacy = db()->query('SELECT id, teacher_id FROM blocks WHERE teacher_id IS NOT NULL');
+    $insertAssign = db()->prepare('INSERT INTO block_subject_assignments (block_id, teacher_id, subject_code, subject_name) VALUES (?,?,?,?)');
+    $hasAssign = db()->prepare('SELECT COUNT(*) FROM block_subject_assignments WHERE block_id=?');
+    foreach ($legacy as $block) {
+        $hasAssign->execute([(int)$block['id']]);
+        if ((int)$hasAssign->fetchColumn()) continue;
+        $insertAssign->execute([(int)$block['id'], (int)$block['teacher_id'], 'MIGRATE', 'Subject not set']);
+        $assignmentId = (int)db()->lastInsertId();
+        $members = db()->prepare('SELECT student_id FROM block_students WHERE block_id=?');
+        $members->execute([(int)$block['id']]);
+        $insertEnroll = db()->prepare('INSERT INTO block_subject_enrollments (assignment_id, student_id, block_id, teacher_id, subject_code, subject_name, synced_at) VALUES (?,?,?,?,?,?,NOW())');
+        foreach ($members as $member) {
+            $insertEnroll->execute([$assignmentId, (int)$member['student_id'], (int)$block['id'], (int)$block['teacher_id'], 'MIGRATE', 'Subject not set']);
+        }
+    }
+    $fk = db()->query("SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='blocks' AND CONSTRAINT_TYPE='FOREIGN KEY' AND CONSTRAINT_NAME='fk_blocks_teacher'")->fetchColumn();
+    if ($fk) db()->exec('ALTER TABLE blocks DROP FOREIGN KEY fk_blocks_teacher');
+    $idx = db()->query("SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='blocks' AND INDEX_NAME='idx_blocks_teacher'")->fetchColumn();
+    if ($idx) db()->exec('ALTER TABLE blocks DROP INDEX idx_blocks_teacher');
+    db()->exec('ALTER TABLE blocks DROP COLUMN teacher_id');
+}
+
+$statusCol = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='students' AND COLUMN_NAME='academic_status'")->fetchColumn();
+if (is_string($statusCol) && !str_contains($statusCol, "Dropped out")) {
+    foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_academic_status.sql')) as $sql) {
+        $sql = trim(preg_replace('/^--.*$/m', '', $sql) ?? '');
+        if ($sql !== '') db()->exec($sql);
+    }
+}
+
+$col->execute(['students', 'username']);
+if (!(int)$col->fetchColumn()) {
+    foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_student_auth.sql')) as $sql) {
+        $sql = trim(preg_replace('/^--.*$/m', '', $sql) ?? '');
+        if ($sql === '') continue;
+        if (preg_match('/^ALTER TABLE students DROP FOREIGN KEY (\w+)/i', $sql, $match)) {
+            $fk = db()->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='students' AND CONSTRAINT_NAME=? AND CONSTRAINT_TYPE='FOREIGN KEY'");
+            $fk->execute([$match[1]]);
+            if (!(int)$fk->fetchColumn()) continue;
+        }
+        if (preg_match('/^ALTER TABLE students DROP COLUMN (\w+)/i', $sql, $match)) {
+            $col->execute(['students', $match[1]]);
+            if (!(int)$col->fetchColumn()) continue;
+        }
+        if (preg_match('/^ALTER TABLE students ADD UNIQUE KEY uq_students_username/i', $sql)) {
+            $idx = db()->query("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='students' AND INDEX_NAME='uq_students_username'")->fetchColumn();
+            if ((int)$idx) continue;
+        }
+        if (preg_match('/^DELETE FROM users WHERE role = \'student\'/i', $sql)) {
+            $left = (int)db()->query("SELECT COUNT(*) FROM users WHERE role='student'")->fetchColumn();
+            if ($left === 0) continue;
+        }
+        if (preg_match('/^ALTER TABLE users MODIFY role ENUM/i', $sql)) {
+            $roleType = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
+            if (is_string($roleType) && !str_contains($roleType, 'student')) continue;
+            $left = (int)db()->query("SELECT COUNT(*) FROM users WHERE role='student'")->fetchColumn();
+            if ($left > 0) continue;
+        }
+        db()->exec($sql);
+    }
+}
+
+$roleType = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
+if (is_string($roleType) && str_contains($roleType, 'student')) {
+    $left = (int)db()->query("SELECT COUNT(*) FROM users WHERE role='student'")->fetchColumn();
+    if ($left === 0) {
+        db()->exec("ALTER TABLE users MODIFY role ENUM('admin','staff') NOT NULL");
+    }
+}
+echo "Migrations applied. Existing records and course names preserved.\n";
