@@ -17,7 +17,7 @@ sync_teacher(1);
 sync_teacher(1);
 sync_teacher(2);
 sync_teacher(3);
-$pdo->exec("INSERT INTO students(id,student_number,first_name,last_name,email,course,year_level) VALUES(1,'100','Test','One','one@example.invalid','Test',1),(2,'200','Test','Two','two@example.invalid','Test',1)");
+$pdo->exec("INSERT INTO students(id,student_number,first_name,last_name,email,course,year_level) VALUES(1,'100','Test','One','one@example.invalid','Test',1),(2,'200','Test','Two','two@example.invalid','Test',1),(3,'300','Test','Three','three@example.invalid','Test',1)");
 function check(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
 function rejected(callable $action, string $message): void {
     try { $action(); } catch (InvalidArgumentException $e) { return; }
@@ -33,8 +33,10 @@ check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE student_id=1 A
 rejected(fn()=>save_block($pdo, ['name'=>'Block B','student_ids'=>[1]], $a), 'Duplicate block name should fail.');
 check($pdo->query("SELECT name FROM blocks WHERE id=$a")->fetchColumn()==='Block A updated', 'Failed edit must roll back.');
 rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[999]]), 'Unknown student must fail.');
-rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[]]), 'Empty membership must fail.');
-rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[[1]]]), 'Malformed membership must fail.');
+save_block($pdo, ['name'=>'Empty allowed','student_ids'=>[]], $a);
+check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE block_id=$a")->fetchColumn()===0, 'Clearing students must leave an empty block.');
+save_block($pdo, ['name'=>'Block A updated','student_ids'=>[2]], $a);
+rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[[1]]]), 'Malformed students must fail.');
 $pdo->exec('UPDATE students SET is_active=0 WHERE id=1');
 rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[1]]), 'Inactive student must fail.');
 check((int)$pdo->query('SELECT COUNT(*) FROM blocks')->fetchColumn()===2, 'Rejected requests must not leave blocks.');
@@ -75,8 +77,23 @@ require dirname(__DIR__) . '/app/blocks-controller.php';
 check($blockTotal===0, 'Search wildcards must be treated literally.');
 $_GET = ['edit'=>$b];
 require dirname(__DIR__) . '/app/blocks-controller.php';
-check(in_array(1, $selectedStudents, true), 'Edit must load existing membership.');
-check(count(array_filter($blockStudents, fn($s)=>(int)$s['id']===1))===1, 'Existing inactive members must remain visible.');
+check(in_array(1, $selectedStudents, true), 'Edit must load existing students.');
+check(count(array_filter($rosterStudents, fn($s)=>(int)$s['id']===1))===1, 'Existing inactive students must remain visible in the Students list.');
+$_GET = ['edit'=>$b, 'assign'=>1, 'student_q'=>'Three'];
+require dirname(__DIR__) . '/app/blocks-controller.php';
+check($assigningStudents === true, 'Assign mode must open for student search.');
+check(count($studentSearchResults)===1 && (int)$studentSearchResults[0]['id']===3, 'Assign search must find active students not already in the block.');
+$_GET = ['edit'=>$b, 'assign'=>1, 'student_q'=>'Two'];
+require dirname(__DIR__) . '/app/blocks-controller.php';
+check(count($studentSearchResults)===0, 'Students already in the block must not appear in assign search.');
+$_GET = ['edit'=>$b, 'assign'=>1, 'student_q'=>'T'];
+require dirname(__DIR__) . '/app/blocks-controller.php';
+check($studentSearchTooShort === true && $studentSearchResults === [], 'Assign search must require at least 2 characters.');
+assign_block_student($pdo, $a, 3);
+check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE block_id=$a AND student_id=3")->fetchColumn()===1, 'Assign must add a student to the block.');
+rejected(fn()=>assign_block_student($pdo, $a, 3), 'Assigning a duplicate student must fail.');
+remove_block_student($pdo, $a, 3);
+check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE block_id=$a AND student_id=3")->fetchColumn()===0, 'Remove must take a student out of the block.');
 $_GET = ['q'=>'Test Teacher'];
 require dirname(__DIR__) . '/app/teachers-controller.php';
 check($teacherTotal===1 && (int)$teacherRows[0]['block_count']===1, 'Teacher directory must count distinct assigned blocks.');

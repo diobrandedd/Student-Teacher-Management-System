@@ -1,5 +1,5 @@
 <div class="bar">
-  <div><h1>Teachers</h1><p class="muted">Create teacher profiles here. Username is auto-built from last name + first initial; temporary password is <strong>123</strong> (must change on first sign-in). Administrators can also manage the same accounts under Users.</p></div>
+  <div><h1>Teachers</h1><p class="muted">Create teacher profiles here. Username is auto-built from last name + first initial; a one-time temporary password is shown after create (must change on first sign-in). Administrators can also manage the same accounts under Users.</p></div>
   <?php if ($canManage): ?><a class="button" href="?page=teachers&amp;add=1">Add teacher</a><?php endif; ?>
 </div>
 <?php
@@ -54,7 +54,7 @@ if ($teacherForm && ($canManage || $editTeacher)):
     </fieldset>
     <fieldset class="form-section">
       <legend>Teacher login</legend>
-      <p class="muted">Username is built automatically from last name + first initial (for example Delos Santos, Brent → <strong>Delossantos_B</strong>). Temporary password is <strong>123</strong> on create.</p>
+      <p class="muted">Username is built automatically from last name + first initial (for example Delos Santos, Brent → <strong>Delossantos_B</strong>). A one-time temporary password is shown after create.</p>
       <div class="grid">
         <div>
           <span class="label-text">Username</span>
@@ -72,7 +72,7 @@ if ($teacherForm && ($canManage || $editTeacher)):
         <?php endif; ?>
       </div>
     </fieldset>
-    <div class="actions"><button><?=$isCreate?'Create teacher':'Save teacher'?></button><?php if (!$isCreate): ?><button type="submit" class="secondary" name="reset_temp_password" value="1">Reset password to 123</button><?php endif; ?><button type="button" class="secondary" data-close-dialog>Cancel</button></div>
+    <div class="actions"><button><?=$isCreate?'Create teacher':'Save teacher'?></button><?php if (!$isCreate): ?><button type="submit" class="secondary" name="reset_temp_password" value="1">Reset temporary password</button><?php endif; ?><button type="button" class="secondary" data-close-dialog>Cancel</button></div>
   </form>
   <?php elseif ($editTeacher): ?>
   <fieldset class="form-section"><legend>Identity</legend>

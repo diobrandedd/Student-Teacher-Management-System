@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_role(['admin', 'staff']);
+require_role(['admin']);
 require_once __DIR__ . '/blocks.php';
 
 $blockErrors = [];
@@ -48,14 +48,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blockMissing) {
             }
             if ($action === 'resync' && $assignmentId) {
                 $count = resync_block_assignment(db(), $blockId, $assignmentId);
-                flash('success', 'Enrollments now match the current roster (' . $count . ' student' . ($count === 1 ? '' : 's') . ').');
+                flash('success', 'Enrollments now match the current students (' . $count . ' student' . ($count === 1 ? '' : 's') . ').');
                 redirect('blocks', ['edit' => $blockId]);
             }
             if ($action === 'edit' && $assignmentId) {
                 $editAssignmentId = $assignmentId;
             } else {
                 save_block_assignment(db(), $blockId, $_POST, $assignmentId);
-                flash('success', $assignmentId ? 'Subject assignment updated and current members synced.' : 'Subject assigned. Current block members were synced.');
+                flash('success', $assignmentId ? 'Subject assignment updated and current students synced.' : 'Subject assigned. Current block students were synced.');
                 redirect('blocks', ['edit' => $blockId]);
             }
         } catch (InvalidArgumentException $exception) {
@@ -66,24 +66,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blockMissing) {
             $assignmentErrors[] = 'The subject assignment could not be saved. Please try again.';
             if ($assignmentId) $editAssignmentId = $assignmentId;
         }
+    } elseif ($form === 'assign_student' && $blockId) {
+        $studentId = filter_var($_POST['student_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
+        try {
+            assign_block_student(db(), $blockId, $studentId);
+            flash('success', 'Student assigned to this block.');
+            redirect('blocks', ['edit' => $blockId, 'assign' => 1]);
+        } catch (InvalidArgumentException $exception) {
+            $blockErrors[] = $exception->getMessage();
+        } catch (PDOException $exception) {
+            error_log('Block student assign failed: ' . $exception->getMessage());
+            $blockErrors[] = 'The student could not be assigned. Please try again.';
+        }
+    } elseif ($form === 'remove_student' && $blockId) {
+        $studentId = filter_var($_POST['student_id'] ?? null, FILTER_VALIDATE_INT) ?: 0;
+        try {
+            remove_block_student(db(), $blockId, $studentId);
+            flash('success', 'Student removed from this block.');
+            redirect('blocks', ['edit' => $blockId]);
+        } catch (InvalidArgumentException $exception) {
+            $blockErrors[] = $exception->getMessage();
+        } catch (PDOException $exception) {
+            error_log('Block student remove failed: ' . $exception->getMessage());
+            $blockErrors[] = 'The student could not be removed. Please try again.';
+        }
     } else {
         $blockInput = [
             'name' => is_string($_POST['name'] ?? null) ? $_POST['name'] : '',
-            'student_ids' => is_array($_POST['student_ids'] ?? null) ? array_values(array_filter($_POST['student_ids'], 'is_scalar')) : [],
+            'student_ids' => $blockInput['student_ids'] ?? [],
         ];
         try {
-            $savedId = save_block(db(), $_POST, $blockId);
+            $savedId = save_block(db(), ['name' => $blockInput['name']], $blockId);
             if ($blockId) {
-                flash('success', 'Block updated. Subject enrollments were not changed; re-sync an assignment if needed.');
+                flash('success', 'Block name saved.');
                 redirect('blocks', ['edit' => $savedId]);
             }
-            flash('success', 'Block created. Assign teachers and subjects next.');
-            redirect('blocks', ['edit' => $savedId]);
+            flash('success', 'Block created. Assign students next.');
+            redirect('blocks', ['edit' => $savedId, 'assign' => 1]);
         } catch (InvalidArgumentException $exception) {
             $blockErrors[] = $exception->getMessage();
         } catch (PDOException $exception) {
             error_log('Block save failed: ' . $exception->getMessage());
-            $blockErrors[] = 'The block could not be saved. Your selection is still here; please try again.';
+            $blockErrors[] = 'The block could not be saved. Please try again.';
         }
     }
 }
@@ -138,9 +162,49 @@ if ($blockId && !$blockMissing) {
 }
 
 $teachers = db()->query("SELECT t.id, u.full_name FROM teachers t JOIN users u ON u.id=t.user_id WHERE u.role='staff' AND u.is_active=1 ORDER BY u.full_name, t.id")->fetchAll();
-$statement = db()->prepare('SELECT id, student_number, first_name, last_name, course, year_level, is_active FROM students WHERE is_active=1 OR id IN (SELECT student_id FROM block_students WHERE block_id=?) ORDER BY last_name, first_name, id');
-$statement->execute([$blockId ?? 0]);
-$blockStudents = $statement->fetchAll();
+
+$selectedStudents = array_values(array_unique(array_map('intval', $blockInput['student_ids'])));
+$rosterStudents = [];
+if ($selectedStudents) {
+    $placeholders = implode(',', array_fill(0, count($selectedStudents), '?'));
+    $statement = db()->prepare(
+        "SELECT id, student_number, first_name, last_name, course, year_level, is_active
+         FROM students
+         WHERE id IN ($placeholders)
+         ORDER BY last_name, first_name, id"
+    );
+    $statement->execute($selectedStudents);
+    $rosterStudents = $statement->fetchAll();
+}
+
+$studentSearch = is_string($_GET['student_q'] ?? null) ? trim($_GET['student_q']) : '';
+$studentSearchResults = [];
+$studentSearchTooShort = $studentSearch !== '' && mb_strlen($studentSearch) < 2;
+if (!$studentSearchTooShort && $studentSearch !== '') {
+    $like = '%' . strtr($studentSearch, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+    $excludeSql = '';
+    $params = [$like, $like, $like];
+    if ($selectedStudents) {
+        $placeholders = implode(',', array_fill(0, count($selectedStudents), '?'));
+        $excludeSql = " AND id NOT IN ($placeholders)";
+        $params = array_merge($params, $selectedStudents);
+    }
+    $statement = db()->prepare(
+        "SELECT id, student_number, first_name, last_name, course, year_level, is_active
+         FROM students
+         WHERE is_active=1
+           AND (student_number LIKE ? ESCAPE '!' OR first_name LIKE ? ESCAPE '!' OR last_name LIKE ? ESCAPE '!')
+           $excludeSql
+         ORDER BY last_name, first_name, id
+         LIMIT 25"
+    );
+    $statement->execute($params);
+    $studentSearchResults = $statement->fetchAll();
+}
+
+$studentCatalogCount = (int) db()->query('SELECT COUNT(*) FROM students WHERE is_active=1')->fetchColumn();
+$assigningStudents = $blockId && (isset($_GET['assign']) || $studentSearch !== '' || $blockErrors);
+
 $blockSearch = is_string($_GET['q'] ?? null) ? trim($_GET['q']) : '';
 $teacherFilter = max(0, (int)(filter_var($_GET['teacher_id'] ?? null, FILTER_VALIDATE_INT) ?: 0));
 $like = '%' . strtr($blockSearch, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
@@ -183,5 +247,4 @@ $statement = db()->prepare(
 );
 $statement->execute([$teacherFilter, $teacherFilter, $like, $like, $like, $like]);
 $blocks = $statement->fetchAll();
-$selectedStudents = array_map('intval', $blockInput['student_ids']);
 $showBlockForm = isset($_GET['add']) || $blockId || $_SERVER['REQUEST_METHOD'] === 'POST';

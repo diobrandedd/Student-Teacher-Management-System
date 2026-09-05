@@ -121,4 +121,79 @@ if (is_string($roleType) && str_contains($roleType, 'student')) {
         db()->exec("ALTER TABLE users MODIFY role ENUM('admin','staff') NOT NULL");
     }
 }
+
+$gradeTables = db()->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('subject_score_items','student_score_entries','assignment_grade_submissions','student_term_grades')")->fetchAll(PDO::FETCH_COLUMN);
+if (!in_array('subject_score_items', $gradeTables, true)) {
+    foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_05_grading.sql')) as $sql) {
+        $sql = trim(preg_replace('/^--.*$/m', '', $sql) ?? '');
+        if ($sql !== '') db()->exec($sql);
+    }
+} else {
+    foreach ([
+        'grade_weight_quiz' => '20',
+        'grade_weight_activities' => '20',
+        'grade_weight_attendance' => '10',
+        'grade_weight_projects' => '20',
+        'grade_weight_exam' => '30',
+        'grade_weight_midterm' => '40',
+        'grade_weight_final' => '60',
+    ] as $key => $value) {
+        db()->prepare('INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_key=VALUES(setting_key)')->execute([$key, $value]);
+    }
+}
+
+foreach (['middle_name', 'display_name'] as $studentCol) {
+    $col->execute(['students', $studentCol]);
+    if (!(int)$col->fetchColumn()) {
+        if ($studentCol === 'middle_name') {
+            db()->exec('ALTER TABLE students ADD COLUMN middle_name VARCHAR(80) NULL AFTER first_name');
+        } else {
+            db()->exec('ALTER TABLE students ADD COLUMN display_name VARCHAR(150) NULL AFTER last_name');
+        }
+    }
+}
+
+$roleTypeEnroll = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
+if (is_string($roleTypeEnroll) && !str_contains($roleTypeEnroll, 'registrar')) {
+    db()->exec("ALTER TABLE users MODIFY role ENUM('admin','staff','registrar') NOT NULL");
+}
+
+$col->execute(['students', 'enrollment_approved_by']);
+if (!(int)$col->fetchColumn()) {
+    db()->exec('ALTER TABLE students ADD COLUMN enrollment_approved_by BIGINT UNSIGNED NULL AFTER is_active');
+    db()->exec('ALTER TABLE students ADD COLUMN enrollment_approved_at DATETIME NULL AFTER enrollment_approved_by');
+    $fkCheck = db()->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='students' AND CONSTRAINT_NAME='fk_students_enrollment_approver'");
+    $fkCheck->execute();
+    if (!(int)$fkCheck->fetchColumn()) {
+        db()->exec('ALTER TABLE students ADD CONSTRAINT fk_students_enrollment_approver FOREIGN KEY (enrollment_approved_by) REFERENCES users(id) ON DELETE SET NULL');
+    }
+}
+
+$enrollTable = db()->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='enrollment_applications'")->fetchColumn();
+if (!(int)$enrollTable) {
+    foreach (explode(';', file_get_contents(__DIR__ . '/migrations/2026_09_06_enrollment.sql')) as $sql) {
+        $sql = trim(preg_replace('/^--.*$/m', '', $sql) ?? '');
+        if ($sql === '') continue;
+        if (preg_match('/^ALTER TABLE users MODIFY role/i', $sql)) continue;
+        if (preg_match('/^ALTER TABLE students/i', $sql)) continue;
+        db()->exec($sql);
+    }
+}
+
+$col->execute(['enrollment_applications', 'lrn']);
+if ((int)$col->fetchColumn()) {
+    db()->exec('ALTER TABLE enrollment_applications DROP COLUMN lrn');
+}
+
+$appType = db()->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='enrollment_applications' AND COLUMN_NAME='application_type'")->fetchColumn();
+if (is_string($appType) && !str_contains($appType, 'moving_up')) {
+    db()->exec("UPDATE enrollment_applications SET application_type='new' WHERE application_type IN ('transferee','returnee')");
+    db()->exec("ALTER TABLE enrollment_applications MODIFY application_type ENUM('new','moving_up') NOT NULL");
+}
+
+$col->execute(['enrollment_applications', 'student_number']);
+if (!(int)$col->fetchColumn()) {
+    db()->exec('ALTER TABLE enrollment_applications ADD COLUMN student_number VARCHAR(30) NULL AFTER application_type');
+}
+
 echo "Migrations applied. Existing records and course names preserved.\n";

@@ -56,7 +56,7 @@ function db(): PDO
     return $pdo;
 }
 
-function e(?string $value): string { return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function e(string|int|float|null $value): string { return htmlspecialchars((string)($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function redirect(string $page = 'dashboard', array $query = []): never
 {
     $params = array_merge(['page' => $page], $query);
@@ -64,6 +64,24 @@ function redirect(string $page = 'dashboard', array $query = []): never
     exit;
 }
 function user(): ?array { return $_SESSION['user'] ?? null; }
+
+function home_page_for_user(?array $u = null): string
+{
+    $u = $u ?? user();
+    if (!$u) {
+        return 'login';
+    }
+    if (($u['role'] ?? '') === 'staff') {
+        return 'assigned_blocks';
+    }
+    if (($u['role'] ?? '') === 'registrar') {
+        return 'enrollments';
+    }
+    if (($u['role'] ?? '') === 'student') {
+        return 'student_subjects';
+    }
+    return 'dashboard';
+}
 function require_auth(): void
 {
     if (!user()) redirect('login');
@@ -79,6 +97,7 @@ function role_label(string $role): string
     return match ($role) {
         'admin' => 'Administrator',
         'staff' => 'Teacher/Staff',
+        'registrar' => 'Registrar',
         'student' => 'Student',
         default => ucfirst($role),
     };
@@ -127,27 +146,52 @@ function audit(string $action, string $entityType, ?int $entityId = null, string
     $actor = user();
     $userId = null;
     if ($actor && ($actor['account_type'] ?? 'user') !== 'student') {
-        $userId = $actor['id'] ?? null;
+        $candidate = filter_var($actor['id'] ?? null, FILTER_VALIDATE_INT);
+        if ($candidate) {
+            // Stale sessions (e.g. after reseed) can hold a deleted users.id; FK would crash logout.
+            $check = db()->prepare('SELECT id FROM users WHERE id=?');
+            $check->execute([$candidate]);
+            if ($check->fetchColumn()) {
+                $userId = $candidate;
+            } else {
+                $details = trim(($details === '' ? '' : $details . ' — ') . 'orphan session user_id=' . $candidate . ' username=' . (string)($actor['username'] ?? ''));
+            }
+        }
     } elseif ($actor && ($actor['account_type'] ?? '') === 'student') {
         $prefix = 'student:' . ($actor['username'] ?? (string)($actor['id'] ?? ''));
         $details = $details === '' ? $prefix : ($prefix . ' — ' . $details);
     }
-    $stmt = db()->prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$userId, $action, $entityType, $entityId, mb_substr($details, 0, 500), $_SERVER['REMOTE_ADDR'] ?? 'unknown']);
+    try {
+        $stmt = db()->prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$userId, $action, $entityType, $entityId, mb_substr($details, 0, 500), $_SERVER['REMOTE_ADDR'] ?? 'unknown']);
+    } catch (PDOException $e) {
+        error_log('Audit log failed: ' . $e->getMessage());
+    }
 }
 
-function validate_student(array $data, bool $studentSelfEdit = false): array
+function validate_student(array $data, bool $studentSelfEdit = false, bool $allowBlankStudentNumber = false): array
 {
     $errors = [];
     if (!filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL)) $errors[] = 'Enter a valid email address.';
     if (($data['phone'] ?? '') !== '' && !preg_match('/^[0-9+() -]{7,20}$/', $data['phone'])) $errors[] = 'Enter a valid phone number.';
     if (!$studentSelfEdit) {
-        foreach (['student_number','first_name','last_name','year_level'] as $field) if (trim((string)($data[$field] ?? '')) === '') $errors[] = ucfirst(str_replace('_', ' ', $field)) . ' is required.';
+        $required = ['first_name', 'last_name', 'year_level'];
+        if (!$allowBlankStudentNumber) {
+            $required[] = 'student_number';
+        }
+        foreach ($required as $field) {
+            if (trim((string)($data[$field] ?? '')) === '') {
+                $errors[] = ucfirst(str_replace('_', ' ', $field)) . ' is required.';
+            }
+        }
         if (course_name($data['course_id']??null)==='') $errors[]='Select a valid course.';
-        if (!preg_match('/^\d{3,30}$/', $data['student_number'] ?? '')) $errors[] = 'Student number must contain digits only (3-30 digits).';
+        $studentNumber = trim((string)($data['student_number'] ?? ''));
+        if ($studentNumber !== '' && !valid_student_number_format($studentNumber)) {
+            $errors[] = 'Student ID must be 3–30 characters using letters, numbers, and hyphens (for example 2026-0001).';
+        }
         if (($data['first_name'] ?? '') !== '' && !valid_person_name($data['first_name'])) $errors[] = 'First name must use letters and common name punctuation only.';
         if (($data['last_name'] ?? '') !== '' && !valid_person_name($data['last_name'])) $errors[] = 'Last name must use letters and common name punctuation only.';
-        if (!filter_var($data['year_level'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 4]])) $errors[] = 'Year level must be from 1 to 4.';
+        if (!filter_var($data['year_level'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 4]])) $errors[] = 'College year must be 1st through 4th year.';
         if (!in_array($data['academic_status'] ?? '', academic_statuses(), true)) $errors[] = 'Select a valid academic status.';
     }
     return $errors;
@@ -163,6 +207,26 @@ function login_username_base(string $lastName, string $firstName): string
     $lastPart = mb_strtoupper(mb_substr($lastLetters, 0, 1)) . mb_strtolower(mb_substr($lastLetters, 1));
     $initial = mb_strtoupper(mb_substr($firstLetters, 0, 1));
     return $lastPart . '_' . $initial;
+}
+
+function allocate_student_number(?int $year = null): string
+{
+    $year = $year ?? (int)date('Y');
+    $prefix = $year . '-';
+    $stmt = db()->prepare('SELECT student_number FROM students WHERE student_number LIKE ?');
+    $stmt->execute([$prefix . '%']);
+    $max = 0;
+    foreach ($stmt as $row) {
+        if (preg_match('/^' . preg_quote($prefix, '/') . '(\d{4})$/', (string)$row['student_number'], $m)) {
+            $max = max($max, (int)$m[1]);
+        }
+    }
+    return $prefix . str_pad((string)($max + 1), 4, '0', STR_PAD_LEFT);
+}
+
+function valid_student_number_format(string $value): bool
+{
+    return (bool)preg_match('/^[A-Za-z0-9][A-Za-z0-9-]{1,28}[A-Za-z0-9]$/', $value);
 }
 
 function allocate_login_username(string $lastName, string $firstName, ?int $ignoreStudentId = null, ?int $ignoreUserId = null): string
@@ -218,9 +282,11 @@ function session_user_from_staff(array $account): array
 
 function session_user_from_student(array $student): array
 {
+    $display = trim((string)($student['display_name'] ?? ''));
+    $legal = trim($student['first_name'] . ' ' . $student['last_name']);
     return [
         'id' => (int)$student['id'],
-        'full_name' => trim($student['first_name'] . ' ' . $student['last_name']),
+        'full_name' => $display !== '' ? $display : $legal,
         'username' => $student['username'],
         'email' => $student['email'],
         'role' => 'student',
@@ -231,6 +297,23 @@ function session_user_from_student(array $student): array
 function academic_statuses(): array
 {
     return ['Active', 'Dropped out', 'Graduated'];
+}
+
+/** Undergraduate college year labels (stored value remains 1–4). */
+function college_year_labels(): array
+{
+    return [
+        1 => '1st year',
+        2 => '2nd year',
+        3 => '3rd year',
+        4 => '4th year',
+    ];
+}
+
+function college_year_label(int|string|null $year): string
+{
+    $y = (int)$year;
+    return college_year_labels()[$y] ?? ($year !== null && $year !== '' ? (string)$year : '—');
 }
 
 function valid_full_name(string $name): bool
@@ -319,28 +402,71 @@ function deny_request(string $message, int $status = 403): never
         exit($message);
     }
     $title = $status === 419 ? 'Form expired' : ($status === 404 ? 'Not found' : 'Access denied');
-    $home = 'index.php';
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . htmlspecialchars($title) . ' - SSIS</title><link rel="stylesheet" href="style.css"></head><body><main class="wrap"><section class="card narrow"><h1>' . htmlspecialchars($title) . '</h1><p class="muted">' . htmlspecialchars($message) . '</p><p><a class="button" href="' . htmlspecialchars($home) . '">Return home</a></p></section></main></body></html>';
+    // Do not send staff to index.php — that reopens Assigned Blocks and can look like the button does nothing.
+    if (user()) {
+                $actions = '<p class="actions"><a class="button" href="?page=logout&amp;csrf=' . htmlspecialchars(csrf_token(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Sign out</a></p>';
+    } else {
+        $actions = '<p><a class="button" href="?page=login">Sign in</a></p>';
+    }
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . htmlspecialchars($title) . ' - SSIS</title><link rel="stylesheet" href="style.css"></head><body><main class="wrap"><section class="card narrow"><h1>' . htmlspecialchars($title) . '</h1><p class="muted">' . htmlspecialchars($message) . '</p>' . $actions . '</section></main></body></html>';
     exit;
 }
 
-function default_temp_password(): string
+/** Fixed password used only by local demo seed scripts — never for live account issuance. */
+function demo_seed_password(): string
 {
-    return '123';
+    return 'DemoTemp1234';
+}
+
+function generate_temp_password(int $length = 14): string
+{
+    $length = max(12, min(32, $length));
+    $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lower = 'abcdefghijkmnopqrstuvwxyz';
+    $digits = '23456789';
+    $all = $upper . $lower . $digits;
+    do {
+        $chars = [
+            $upper[random_int(0, strlen($upper) - 1)],
+            $lower[random_int(0, strlen($lower) - 1)],
+            $digits[random_int(0, strlen($digits) - 1)],
+        ];
+        for ($i = count($chars); $i < $length; $i++) {
+            $chars[] = $all[random_int(0, strlen($all) - 1)];
+        }
+        for ($i = count($chars) - 1; $i > 0; $i--) {
+            $j = random_int(0, $i);
+            [$chars[$i], $chars[$j]] = [$chars[$j], $chars[$i]];
+        }
+        $plain = implode('', $chars);
+    } while (!password_is_strong($plain));
+    return $plain;
+}
+
+/**
+ * @return array{plain: string, hash: string}
+ */
+function issue_temporary_password(?string $plain = null): array
+{
+    $plain = $plain ?? generate_temp_password();
+    return [
+        'plain' => $plain,
+        'hash' => password_hash($plain, PASSWORD_DEFAULT),
+    ];
 }
 
 function password_is_strong(string $password): bool
 {
-    return $password !== default_temp_password()
-        && strlen($password) >= 12
+    return strlen($password) >= 12
         && preg_match('/[A-Z]/', $password) === 1
         && preg_match('/[a-z]/', $password) === 1
         && preg_match('/\d/', $password) === 1;
 }
 
-function hash_temp_password(): string
+/** @deprecated Prefer issue_temporary_password(); kept for seed scripts that only need a hash. */
+function hash_temp_password(?string $plain = null): string
 {
-    return password_hash(default_temp_password(), PASSWORD_DEFAULT);
+    return issue_temporary_password($plain)['hash'];
 }
 
 function password_field(string $id, string $name, array $attrs = []): string

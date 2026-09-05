@@ -16,9 +16,13 @@ function expect(bool $ok, string $label): void
     echo "FAIL $label\n";
 }
 
-expect(default_temp_password() === '123', 'default temp password is 123');
-expect(password_verify('123', hash_temp_password()), 'hash_temp_password verifies as 123');
-expect(!password_is_strong('123'), 'temp password is not strong');
+$issued = issue_temporary_password();
+expect(password_is_strong($issued['plain']), 'generated temp password meets strength rules');
+expect(password_verify($issued['plain'], $issued['hash']), 'issued temp password verifies against hash');
+expect(strlen($issued['plain']) >= 12, 'generated temp password length >= 12');
+expect(demo_seed_password() === 'DemoTemp1234', 'demo seed password is documented constant');
+expect(password_verify(demo_seed_password(), hash_temp_password(demo_seed_password())), 'hash_temp_password verifies demo seed password');
+expect(!password_is_strong('123'), 'short numeric password is not strong');
 expect(!password_is_strong('short'), 'short password is not strong');
 expect(!password_is_strong('alllowercase1'), 'missing uppercase is not strong');
 expect(password_is_strong('ValidPassw0rd!'), '12+ mixed password is strong');

@@ -36,6 +36,12 @@ colors:
   table-row-hover: "#f7faf8"
   badge-bg: "#e6eee9"
   badge-ink: "#3e5748"
+  enroll-pending-bg: "#f5efe4"
+  enroll-pending-ink: "#5c4a28"
+  enroll-approved-bg: "#e6eee9"
+  enroll-approved-ink: "#214e37"
+  enroll-rejected-bg: "#fff0ee"
+  enroll-rejected-ink: "#8b2721"
   selection-bg: "#cce7da"
   selection-ink: "#153d2d"
   disabled-bg: "#e3e9e5"
@@ -180,6 +186,20 @@ components:
     textColor: "{colors.error-ink}"
     rounded: "{rounded.notice}"
     padding: "16px 20px"
+  announcement:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.dialog}"
+    padding: "16px 12px 16px 20px"
+    width: "520px"
+  announcement-title:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.brand-ink}"
+    typography: "{typography.label}"
+  standing-announcement:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    padding: "12px 32px"
   nav-link:
     backgroundColor: "transparent"
     textColor: "{colors.nav-link}"
@@ -193,6 +213,36 @@ components:
     rounded: "{rounded.control}"
     padding: "9px 12px"
     height: "44px"
+  nav-more-panel:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.nav-link}"
+    rounded: "{rounded.table}"
+    padding: "8px"
+    width: "200px"
+  badge-enroll-pending:
+    backgroundColor: "{colors.enroll-pending-bg}"
+    textColor: "{colors.enroll-pending-ink}"
+    rounded: "{rounded.control}"
+    padding: "4px 9px"
+    typography: "{typography.badge}"
+  badge-enroll-approved:
+    backgroundColor: "{colors.enroll-approved-bg}"
+    textColor: "{colors.enroll-approved-ink}"
+    rounded: "{rounded.control}"
+    padding: "4px 9px"
+    typography: "{typography.badge}"
+  badge-enroll-rejected:
+    backgroundColor: "{colors.enroll-rejected-bg}"
+    textColor: "{colors.enroll-rejected-ink}"
+    rounded: "{rounded.control}"
+    padding: "4px 9px"
+    typography: "{typography.badge}"
+  enroll-form:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
+    padding: "28px"
+    width: "960px"
 ---
 
 # Design System: SSIS
@@ -201,16 +251,18 @@ components:
 
 **Creative North Star: "The Campus Gate"**
 
-SSIS looks like a warm school-office gate, not a marketing site and not a dark security console. Staff pass through a clear institutional entry, then work on quiet paper-like surfaces where records, tables, and forms do the talking. The green accent means proceed and belong; mint washes mark status and selection without turning playful.
+SSIS looks like a warm college registrar gate — higher education, not a DepEd basic-education portal, not a marketing site, and not a dark security console. Staff and faculty pass through a clear institutional entry, then work on quiet paper-like surfaces where undergraduate records, tables, and forms do the talking. The green accent means proceed and belong; mint washes mark status and selection without turning playful.
 
-The system stays approachable and human while remaining formal. Density favors registrar speed: readable tables, bold labels, 44px controls, and dialogs that lift only when editing. Surfaces stay flat at rest so scan paths stay calm.
+The system stays approachable and human while remaining formal. Density favors registrar and college-office speed: readable tables, bold labels, 44px controls, and dialogs that lift only when editing. Surfaces stay flat at rest so scan paths stay calm.
 
 **Key Characteristics:**
-- Soft institutional green on cool mint paper
-- Flat tonal layering; dialog is the only lifted surface
+- Soft institutional green on cool mint paper — college / university office, not K–12
+- Flat tonal layering; only dialogs and completion announcements leave the page plane
 - Bold 14px action/label type on Arial UI stack
 - 6px controls, 12px cards/dialogs, mint current-nav and selection
 - Role-aware chrome without decorative dashboard noise
+- Admin overflow via a compact More disclosure — not a mega-menu
+- Copy and fields speak undergraduate enrollment (programs, 1st–4th year, registrar) — no DepEd LRN or grade-school framing
 
 ## Colors
 
@@ -235,10 +287,14 @@ A single institutional teal-green accent on cool mint paper, with soft sage part
 - **Field Border Sage** (`{colors.field-border}`): Input/select/textarea stroke; hover darkens to `{colors.field-border-hover}`.
 
 ### Status
-- **Success Notice** (`{colors.notice-bg}` / `{colors.notice-border}` / `{colors.notice-ink}`): Flash and validation success.
-- **Error Notice** (`{colors.error-bg}` / `{colors.error-border}` / `{colors.error-ink}`): Alerts and form errors.
+- **Success Notice** (`{colors.notice-bg}` / `{colors.notice-border}` / `{colors.notice-ink}`): In-context status next to the work (roster mismatch, helper alerts) — never completion flashes.
+- **Error Notice** (`{colors.error-bg}` / `{colors.error-border}` / `{colors.error-ink}`): Inline alerts and form errors that stay with the field group.
+- **Completion Announcement** (`{colors.surface}` / `{colors.ink}` / `{colors.brand-ink}`): Overlay confirmation after a save, create, or update. White sheet, not a mint fill.
 - **Danger Action** (`{colors.danger}` / `{colors.danger-hover}`): Destructive buttons only.
 - **Role Badge** (`{colors.badge-bg}` / `{colors.badge-ink}`): Compact role/status chips.
+- **Enrollment Pending** (`{colors.enroll-pending-bg}` / `{colors.enroll-pending-ink}`): Warm paper chip for applications awaiting review.
+- **Enrollment Approved** (`{colors.enroll-approved-bg}` / `{colors.enroll-approved-ink}`): Mint chip matching success tone for approved applications.
+- **Enrollment Rejected** (`{colors.enroll-rejected-bg}` / `{colors.enroll-rejected-ink}`): Blush chip aligned with error ink for rejected applications.
 - **Selection Wash** (`{colors.selection-bg}` / `{colors.selection-ink}`): Text selection and checked student-picker rows (with `{colors.nav-current}`).
 
 **The One Gate Accent Rule.** Institutional Teal-Green is for actions, links, focus, and brand — not for large fills, hero gradients, or decorative panels. Mint washes carry status; green carries intent.
@@ -270,21 +326,22 @@ A single institutional teal-green accent on cool mint paper, with soft sage part
 
 Content lives in a centered `.wrap` lane (`max-width: 1184px`) with horizontal padding 32px (20px ≤600px). Header bar padding is 18px vertical; main content pads 36px top / 64px bottom (28px top on small screens).
 
-Page toolbars use `.bar` — space-between, wrap, 20px gap — pairing a title with a primary action. Staff forms use a two-column `.grid` (24px column gap) that collapses to one column ≤600px. Dashboard `.stats` is a three-column card row that stacks on small screens. Narrow auth/setup cards cap at 480px and center with generous top margin.
+Page toolbars use `.bar` — space-between, wrap, 20px gap — pairing a title with a primary action. Staff forms use a two-column `.grid` (24px column gap) that collapses to one column ≤600px. Dashboard `.stats` is a three-column card row that stacks on small screens. Narrow auth/setup cards cap at 480px and center with generous top margin. Public **Enroll Now** uses the same card + grid language at a wider lane (`max-width: 960px`) with section jump chips under the intro.
 
-Search rows flex with a capped input (`max-width: 440px`) that expands on mobile. Tables sit in rounded `.table-wrap` shells and may scroll horizontally on small viewports (table `min-width: 620px` ≤600px). Breakpoints observed: 900px (nav full-width), 600px (grid/stats/spacing densify). Print hides chrome and actions.
+Search rows flex with a capped input (`max-width: 440px`) that expands on mobile. Tables sit in rounded `.table-wrap` shells and may scroll horizontally on small viewports (table `min-width: 620px` ≤600px). Breakpoints observed: 900px (nav full-width / More panel becomes static), 600px (grid/stats/spacing densify). Print hides chrome and actions.
 
 **The Work-Lane Rule.** Keep primary records work inside the 1184px lane. Do not introduce full-bleed marketing bands or side-panel heroes into Operate screens.
 
 ## Elevation & Depth
 
-Depth is almost entirely tonal. Cards, tables, header, and inputs sit flat on Quiet Clinic Paper, separated by Pale Partition borders and soft mint washes. The only structural lift is the modal dialog: soft forest-tinted shadow (`0 24px 80px #12291f40`) over a dimmed scrim (`{colors.dialog-scrim}`). Hover states change background wash, not shadow.
+Depth is almost entirely tonal. Cards, tables, header, and inputs sit flat on Quiet Clinic Paper, separated by Pale Partition borders and soft mint washes. Two surfaces leave the page plane: the modal dialog (soft forest-tinted shadow `0 24px 80px #12291f40` over a dimmed scrim) and the completion announcement (lighter lift `0 16px 48px #12291f33`, no scrim). Hover states change background wash, not shadow.
 
 ### Shadow Vocabulary
 - **Dialog lift** (`box-shadow: 0 24px 80px #12291f40`): Modal editors only.
+- **Announcement lift** (`box-shadow: 0 16px 48px #12291f33`): Overlay completion announcements only.
 - **No ambient card shadow:** Cards and table wraps use border + fill only.
 
-**The Flat-By-Default Rule.** Surfaces are flat at rest. Shadows appear only when a dialog must leave the page plane. Do not add drop shadows to cards, stats, or nav.
+**The Flat-By-Default Rule.** Surfaces are flat at rest. Shadows appear only when a surface must leave the page plane — dialogs (with scrim) and completion announcements (no scrim). Do not add drop shadows to cards, stats, or nav.
 
 ## Shapes
 
@@ -318,19 +375,33 @@ Refined and restrained — bold 14px labels, 44px min height, 6px radius, 10×18
 - **Error:** Notice-error block above the form (role=alert), not per-field color alone
 
 ### Navigation
-Header on white with bottom Pale Partition. Brand wordmark at 17px/700 Brand Ink. Links are 14px sage chips (44px tall, 6px radius); hover mist; current page uses Nav Current Mint + bold ink. On ≤900px, nav wraps full width under the brand.
+Header on white with bottom Pale Partition. Brand wordmark at 17px/700 Brand Ink. Links are 14px sage chips (44px tall, 6px radius); hover mist; current page uses Nav Current Mint + bold ink. Desktop nav stays on one row (`flex-wrap: nowrap`); Sign out stays visible at the end.
+
+**Admin overflow:** Daily records stay primary (Dashboard, Students, Teachers, Blocks, Enrollments, Reports). Catalog and administration (Courses, Departments, Grading system, Users, Audit logs, Settings) live under a native `<details class="nav-more">` **More** disclosure. The summary matches nav-chip sizing; open/current uses Nav Current Mint. The panel is a flat Surface White sheet (`min-width: 200px`, 10px radius, Pale Partition border, 8px padding, `z-index: 30`) — no shadow. On ≤900px the panel becomes static under the summary and the nav may wrap. Guest auth chrome is Enroll Now + Sign in only; registrar is Enrollments + Sign out; teacher and student walls stay short and flat.
+
+**The Overflow More Rule.** Collapse secondary admin modules into More when the top bar would wrap. Keep role walls intact. Do not replace them with a generic mega-menu or cross-role dump.
 
 ### Tables
-White shell, 10px radius, partition border. Head row uses table-head tint and 13px bold labels. Body 14px with tabular nums; row hover mist; action links bold and 44px tall. Empty states center muted copy inside the table.
+White shell, 10px radius, partition border. Head row uses table-head tint and 13px bold labels. Body 14px with tabular nums; row hover mist. Empty states center muted copy inside the table.
+
+**The Clickable-Row Rule (pinned preference).** Record lists open detail work by clicking the whole row (`tr.row-link` + `data-href`), which loads a native `<dialog>` on top of the current list page — the same pattern as Students. Do not add an Actions column whose only job is “Open …”. Do not navigate away to a separate full-page detail for that record. Per-row mutate controls (Edit / Remove on score items) may stay as compact in-row controls when they are not navigation.
 
 ### Badges
-Compact mint chips (12px text, 6px radius) for role labels beside the signed-in name.
+Compact mint chips (12px text, 6px radius) for role labels beside the signed-in name. Enrollment queue status uses dedicated chips: Pending (warm paper), Approved (mint), Rejected (blush) — same geometry as role badges.
+
+### Enroll form (public application)
+Public college applicants use a multi-section card form (`enroll-form`, max-width 960px) with the same fieldset / two-column grid as staff editors. Copy speaks undergraduate admission (preferred college program, 1st–4th year, registrar review) — not DepEd basic education. Section jump chips (`.enroll-jump`) sit under the intro as compact mint links (13px/700, 6px radius) for long-form scanning. Document previews are small bordered sheets (8px radius, max-width 180px). Guest header mirrors auth: Enroll Now (current) + Sign in. After submit, stay in the work lane with an in-context success notice — not a marketing thank-you page.
 
 ### Notices
-8px radius status banners: success mint or error blush, 16×20 padding. Used for flash messages and validation lists.
+8px radius in-context banners: mint for status beside the work, blush for validation lists. Padding 16×20. These stay in the document flow next to the form or table they explain. They are not used for completed actions.
+
+### Announcements (signature for completion)
+Completed and confirmed work is announced as an overlay, never as an in-flow mint rectangle. A fixed layer (`z-index: 40`) centers a white 12px sheet (`max-width: 520px`) over the header without shifting the records lane. Title is 14px/700 Brand Ink (“Completed” or “Could not complete”); body is 14px records ink. Dismiss uses the same 44×44 icon close as dialogs. Success auto-clears after 8s (paused on hover/focus); Escape dismisses when no dialog is open. Entrance is one ease-out (opacity, slight rise, brief blur); `prefers-reduced-motion` removes the motion and keeps the state change.
+
+Standing system copy (maintenance) is a full-width white bar under the header with a Pale Partition bottom edge — paper, not mint fill.
 
 ### Dialogs (signature)
-Native `<dialog>` editors (480px default, 760px wide forms). White 12px sheet, 28px padding, title bar with close control, actions row separated by a top partition line. Student picker lists use bordered option rows with mint checked state. Body scroll locks while open.
+Native `<dialog>` editors (480px default, 760px wide forms). White 12px sheet, 28px padding, title bar with close control, actions row separated by a top partition line. Student picker lists use bordered option rows with mint checked state. Body scroll locks while open. List → detail work (Assigned Blocks roster, My Subjects score items, Enter scores, student/teacher editors) always uses this overlay on the parent list URL’s return target — never a bare full-page swap for the same job.
 
 ### Skip link
 Off-screen until focus; white pill with 2px primary border — accessibility chrome, not decoration.
@@ -341,12 +412,19 @@ Off-screen until focus; white pill with 2px primary border — accessibility chr
 - **Do** keep Institutional Teal-Green for actions, links, focus, and brand ink only.
 - **Do** use flat cards/tables with Pale Partition borders and mint washes for status/selection.
 - **Do** preserve 44px minimum hit targets on buttons, nav, and table actions.
-- **Do** lift only dialogs (dialog shadow + scrim); leave other surfaces flat.
+- **Do** lift only dialogs (shadow + scrim) and completion announcements (shadow, no scrim); leave other surfaces flat.
+- **Do** announce completed saves as overlay announcements that do not shift the work lane.
 - **Do** collapse the form grid and stats to a single column at 600px.
+- **Do** open record detail from a clickable table row into a modal dialog on the current list page.
+- **Do** keep admin primary modules in the top bar and put catalog/admin overflow under More when the bar would wrap.
+- **Do** use enrollment status chips (pending / approved / rejected) on the Enrollments queue.
 
 ### Don't:
 - **Don't** introduce purple/indigo SaaS gradients, glow accents, or dark-mode shells.
-- **Don't** add ambient shadows under cards, stats, or the header.
+- **Don't** add ambient shadows under cards, stats, or the header — including the More dropdown panel.
+- **Don't** insert an in-flow mint rectangle after a successful action; that pattern is reserved for in-context notices, not completions.
 - **Don't** use pill-full radii, floating badge stickers, or icon-tile marketing headers.
-- **Don't** invent school logos, testimonials, or support contacts in chrome — school name comes from settings.
-- **Don't** replace role-aware nav with a generic mega-menu or dashboard widget wall.
+- **Don't** invent school logos, testimonials, or support contacts in chrome — college/university name comes from settings.
+- **Don't** introduce DepEd / basic-education framing (LRN, grade 1–12, Form 138 as core identity) into this college/university product.
+- **Don't** replace role-aware nav with a generic mega-menu or dashboard widget wall; More is overflow only inside the admin wall.
+- **Don't** use an Actions / “Open roster” (or similar) column only to navigate into a record — the row itself is the open control.

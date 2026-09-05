@@ -4,39 +4,48 @@ declare(strict_types=1);
 function save_block(PDO $pdo, array $input, ?int $id = null): int
 {
     $name = is_string($input['name'] ?? null) ? trim($input['name']) : '';
-    $ids = $input['student_ids'] ?? [];
     if ($name === '' || mb_strlen($name) > 100) throw new InvalidArgumentException('Enter a block name of 1–100 characters.');
-    if (!is_array($ids)) throw new InvalidArgumentException('Select valid students.');
+
+    $hasRoster = array_key_exists('student_ids', $input);
     $students = [];
-    foreach ($ids as $value) {
-        $student = filter_var($value, FILTER_VALIDATE_INT);
-        if (!$student || $student < 1) throw new InvalidArgumentException('Select valid students.');
-        $students[] = $student;
+    if ($hasRoster) {
+        $ids = $input['student_ids'];
+        if (!is_array($ids)) throw new InvalidArgumentException('Select valid students.');
+        foreach ($ids as $value) {
+            $student = filter_var($value, FILTER_VALIDATE_INT);
+            if (!$student || $student < 1) throw new InvalidArgumentException('Select valid students.');
+            $students[] = $student;
+        }
+        $students = array_values(array_unique($students));
+        sort($students);
     }
-    $students = array_values(array_unique($students));
-    if (!$students) throw new InvalidArgumentException('Select at least one student for this block.');
-    sort($students);
+
     $pdo->beginTransaction();
     try {
         if ($id) {
             $statement = $pdo->prepare('SELECT id FROM blocks WHERE id = ? FOR UPDATE');
             $statement->execute([$id]);
             if (!$statement->fetchColumn()) throw new InvalidArgumentException('This block no longer exists. Return to Blocks and try again.');
-        }
-        $placeholders = implode(',', array_fill(0, count($students), '?'));
-        $statement = $pdo->prepare("SELECT id FROM students WHERE id IN ($placeholders) AND (is_active=1 OR id IN (SELECT student_id FROM block_students WHERE block_id=?)) ORDER BY id FOR UPDATE");
-        $statement->execute([...$students, $id ?? 0]);
-        if (count($statement->fetchAll()) !== count($students)) throw new InvalidArgumentException('A selected student is inactive or no longer available. Review the selection.');
-        if ($id) {
             $pdo->prepare('UPDATE blocks SET name=? WHERE id=?')->execute([$name, $id]);
-            $pdo->prepare('DELETE FROM block_students WHERE block_id=?')->execute([$id]);
         } else {
             $pdo->prepare('INSERT INTO blocks (name) VALUES (?)')->execute([$name]);
             $id = (int)$pdo->lastInsertId();
         }
-        $statement = $pdo->prepare('INSERT INTO block_students (block_id, student_id) VALUES (?, ?)');
-        foreach ($students as $student) $statement->execute([$id, $student]);
-        audit('SAVE', 'block', $id, 'Saved block and student membership');
+
+        if ($hasRoster) {
+            if ($students) {
+                $placeholders = implode(',', array_fill(0, count($students), '?'));
+                $statement = $pdo->prepare("SELECT id FROM students WHERE id IN ($placeholders) AND (is_active=1 OR id IN (SELECT student_id FROM block_students WHERE block_id=?)) ORDER BY id FOR UPDATE");
+                $statement->execute([...$students, $id]);
+                if (count($statement->fetchAll()) !== count($students)) throw new InvalidArgumentException('A selected student is inactive or no longer available. Review the selection.');
+            }
+            $pdo->prepare('DELETE FROM block_students WHERE block_id=?')->execute([$id]);
+            $statement = $pdo->prepare('INSERT INTO block_students (block_id, student_id) VALUES (?, ?)');
+            foreach ($students as $student) $statement->execute([$id, $student]);
+            audit('SAVE', 'block', $id, 'Saved block name and students');
+        } else {
+            audit('SAVE', 'block', $id, 'Saved block name');
+        }
         $pdo->commit();
         return $id;
     } catch (Throwable $exception) {
@@ -44,6 +53,54 @@ function save_block(PDO $pdo, array $input, ?int $id = null): int
         if ($exception instanceof PDOException && ($exception->errorInfo[1] ?? null) === 1062) {
             throw new InvalidArgumentException('That block name is already in use. Choose a different name.');
         }
+        throw $exception;
+    }
+}
+
+function assign_block_student(PDO $pdo, int $blockId, int $studentId): void
+{
+    if ($studentId < 1) throw new InvalidArgumentException('Select a student to assign.');
+    $pdo->beginTransaction();
+    try {
+        $statement = $pdo->prepare('SELECT id FROM blocks WHERE id=? FOR UPDATE');
+        $statement->execute([$blockId]);
+        if (!$statement->fetchColumn()) throw new InvalidArgumentException('This block no longer exists.');
+
+        $statement = $pdo->prepare('SELECT id, is_active FROM students WHERE id=? FOR UPDATE');
+        $statement->execute([$studentId]);
+        $student = $statement->fetch();
+        if (!$student) throw new InvalidArgumentException('That student record was not found.');
+        if (!(int)$student['is_active']) throw new InvalidArgumentException('That student is inactive and cannot be assigned.');
+
+        $exists = $pdo->prepare('SELECT COUNT(*) FROM block_students WHERE block_id=? AND student_id=?');
+        $exists->execute([$blockId, $studentId]);
+        if ((int)$exists->fetchColumn() > 0) throw new InvalidArgumentException('That student is already in this block.');
+
+        $pdo->prepare('INSERT INTO block_students (block_id, student_id) VALUES (?, ?)')->execute([$blockId, $studentId]);
+        audit('ASSIGN', 'block_student', $blockId, "Assigned student #$studentId");
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        $pdo->rollBack();
+        throw $exception;
+    }
+}
+
+function remove_block_student(PDO $pdo, int $blockId, int $studentId): void
+{
+    if ($studentId < 1) throw new InvalidArgumentException('Select a student to remove.');
+    $pdo->beginTransaction();
+    try {
+        $statement = $pdo->prepare('SELECT id FROM blocks WHERE id=? FOR UPDATE');
+        $statement->execute([$blockId]);
+        if (!$statement->fetchColumn()) throw new InvalidArgumentException('This block no longer exists.');
+
+        $statement = $pdo->prepare('DELETE FROM block_students WHERE block_id=? AND student_id=?');
+        $statement->execute([$blockId, $studentId]);
+        if ($statement->rowCount() < 1) throw new InvalidArgumentException('That student is not in this block.');
+        audit('REMOVE', 'block_student', $blockId, "Removed student #$studentId");
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        $pdo->rollBack();
         throw $exception;
     }
 }

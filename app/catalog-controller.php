@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_role(['admin','staff']);
+require_role(['admin']);
 // The router supplies only these two table names.
 $catalogTable = $page === 'courses' ? 'courses' : 'departments';
 $catalogLabel = $page === 'courses' ? 'course' : 'department';

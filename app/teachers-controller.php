@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_role(['admin', 'staff']);
+require_role(['admin']);
 
 $teacherErrors = [];
 $editTeacher = null;
@@ -47,13 +47,14 @@ if (isset($_GET['add'])) {
         }
         if (!$teacherErrors) {
             $fullName = compose_full_name($createInput['first_name'], $createInput['middle_name'], $createInput['last_name']);
+            $issuedTemp = issue_temporary_password();
             db()->beginTransaction();
             try {
                 db()->prepare('INSERT INTO users(full_name,username,email,password_hash,role,must_change_password) VALUES(?,?,?,?,?,1)')->execute([
                     $fullName,
                     $username,
                     $createInput['email'],
-                    hash_temp_password(),
+                    $issuedTemp['hash'],
                     'staff',
                 ]);
                 $userId = (int)db()->lastInsertId();
@@ -72,7 +73,7 @@ if (isset($_GET['add'])) {
                 ]);
                 audit('CREATE', 'teacher', $teacherId, 'Created teacher account and profile '.$username);
                 db()->commit();
-                flash('success', 'Teacher created. Username is '.$username.'; temporary password is 123. They must change it on first sign-in.');
+                flash('success', 'Teacher created. Username is '.$username.'; temporary password is '.$issuedTemp['plain'].'. Share it privately — they must change it on first sign-in.');
                 redirect('teachers');
             } catch (PDOException $exception) {
                 db()->rollBack();
@@ -125,13 +126,15 @@ if ($editId) {
         $isActive = isset($_POST['is_active']) ? 1 : 0;
         if (!$teacherErrors) {
             $fullName = compose_full_name($input['first_name'], $input['middle_name'], $input['last_name']);
+            $issuedTemp = null;
             db()->beginTransaction();
             try {
                 $params = [$fullName, $username, $input['email'], $isActive];
                 $sql = 'UPDATE users SET full_name=?, username=?, email=?, is_active=?';
                 if ($resetTemp) {
+                    $issuedTemp = issue_temporary_password();
                     $sql .= ', password_hash=?, must_change_password=1, failed_attempts=0, locked_until=NULL';
-                    $params[] = hash_temp_password();
+                    $params[] = $issuedTemp['hash'];
                 }
                 $sql .= ' WHERE id=?';
                 $params[] = $editTeacher['user_id'];
@@ -147,8 +150,8 @@ if ($editId) {
                 ]);
                 audit('UPDATE', 'teacher', (int)$editId, $resetTemp ? 'Updated teacher and reset temporary password' : 'Updated teacher profile and account');
                 db()->commit();
-                flash('success', $resetTemp
-                    ? 'Teacher saved. Username is '.$username.'. Temporary password reset to 123; they must change it on next sign-in.'
+                flash('success', $resetTemp && $issuedTemp
+                    ? 'Teacher saved. Username is '.$username.'. Temporary password is '.$issuedTemp['plain'].'; share it privately — they must change it on next sign-in.'
                     : 'Teacher record saved. Username is '.$username.'.');
                 redirect('teachers');
             } catch (PDOException $exception) {
