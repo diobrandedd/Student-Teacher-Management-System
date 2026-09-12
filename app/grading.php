@@ -408,7 +408,7 @@ function validate_term_ready_for_submit(PDO $db, int $assignmentId, string $term
     }
     $roster = enrollment_roster($db, $assignmentId);
     if (!$roster) {
-        throw new InvalidArgumentException('No students are enrolled on this subject roster. Match roster from Blocks first.');
+        throw new InvalidArgumentException('No students are enrolled on this subject yet. Place students into the block first.');
     }
     foreach ($roster as $student) {
         if (!student_has_complete_drafts($db, $assignmentId, (int)$student['student_id'], $term)) {

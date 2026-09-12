@@ -57,7 +57,7 @@ function db(): PDO
 }
 
 function e(string|int|float|null $value): string { return htmlspecialchars((string)($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function redirect(string $page = 'dashboard', array $query = []): never
+function redirect(string $page = 'students', array $query = []): never
 {
     $params = array_merge(['page' => $page], $query);
     header('Location: index.php?' . http_build_query($params));
@@ -75,22 +75,141 @@ function home_page_for_user(?array $u = null): string
         return 'assigned_blocks';
     }
     if (($u['role'] ?? '') === 'registrar') {
-        return 'enrollments';
+        if (!empty($u['can_enrollments'])) {
+            return 'enrollments';
+        }
+        if (!empty($u['can_blocking'])) {
+            return 'blocking';
+        }
+        if (!empty($u['can_assign_teachers'])) {
+            return 'assign_teachers';
+        }
+        if (!empty($u['can_view_students'])) {
+            return 'students';
+        }
+        return 'registrar_home';
     }
     if (($u['role'] ?? '') === 'student') {
         return 'student_subjects';
     }
-    return 'dashboard';
+    return 'students';
 }
 function require_auth(): void
 {
     if (!user()) redirect('login');
-    $page = $_GET['page'] ?? 'dashboard';
+    if ((user()['role'] ?? '') === 'registrar') {
+        refresh_registrar_session_permissions();
+    }
+    $page = $_GET['page'] ?? home_page_for_user();
     if (!empty($_SESSION['must_change_password']) && !in_array($page, ['change_password', 'logout'], true)) {
         redirect('change_password');
     }
 }
 function require_role(array $roles): void { require_auth(); if (!in_array(user()['role'], $roles, true)) { deny_request('You do not have permission to open this page.', 403); } }
+
+/** Duty keys: enrollments | blocking | assign_teachers | view_students */
+function registrar_capability_columns(): array
+{
+    return [
+        'enrollments' => 'can_enrollments',
+        'blocking' => 'can_blocking',
+        'assign_teachers' => 'can_assign_teachers',
+        'view_students' => 'can_view_students',
+    ];
+}
+
+function registrar_permissions_from_post(array $post): array
+{
+    return [
+        'can_enrollments' => isset($post['can_enrollments']) ? 1 : 0,
+        'can_blocking' => isset($post['can_blocking']) ? 1 : 0,
+        'can_assign_teachers' => isset($post['can_assign_teachers']) ? 1 : 0,
+        'can_view_students' => isset($post['can_view_students']) ? 1 : 0,
+    ];
+}
+
+function registrar_permissions_from_account(array $account): array
+{
+    return [
+        'can_enrollments' => (int)($account['can_enrollments'] ?? 0) === 1 ? 1 : 0,
+        'can_blocking' => (int)($account['can_blocking'] ?? 0) === 1 ? 1 : 0,
+        'can_assign_teachers' => (int)($account['can_assign_teachers'] ?? 0) === 1 ? 1 : 0,
+        'can_view_students' => (int)($account['can_view_students'] ?? 0) === 1 ? 1 : 0,
+    ];
+}
+
+function registrar_has_any_capability(?array $u = null): bool
+{
+    $u = $u ?? user();
+    if (!$u || ($u['role'] ?? '') !== 'registrar') {
+        return false;
+    }
+    foreach (registrar_capability_columns() as $column) {
+        if (!empty($u[$column])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function user_can(string $capability): bool
+{
+    $u = user();
+    if (!$u) {
+        return false;
+    }
+    if (($u['role'] ?? '') === 'admin') {
+        return true;
+    }
+    if (($u['role'] ?? '') !== 'registrar') {
+        return false;
+    }
+    $column = registrar_capability_columns()[$capability] ?? null;
+    if ($column === null) {
+        return false;
+    }
+    return !empty($u[$column]);
+}
+
+/** Admin always allowed; registrar only when the duty flag is on. */
+function require_registrar_capability(string $capability): void
+{
+    require_auth();
+    $role = user()['role'] ?? '';
+    if ($role === 'admin') {
+        return;
+    }
+    if ($role === 'registrar' && user_can($capability)) {
+        return;
+    }
+    deny_request('You do not have permission to open this page.', 403);
+}
+
+function refresh_registrar_session_permissions(): void
+{
+    $u = user();
+    if (!$u || ($u['role'] ?? '') !== 'registrar') {
+        return;
+    }
+    static $refreshed = false;
+    if ($refreshed) {
+        return;
+    }
+    $refreshed = true;
+    try {
+        $statement = db()->prepare(
+            'SELECT can_enrollments, can_blocking, can_assign_teachers, can_view_students FROM users WHERE id=? AND role=\'registrar\' LIMIT 1'
+        );
+        $statement->execute([(int)$u['id']]);
+        $row = $statement->fetch();
+        if (!$row) {
+            return;
+        }
+        $_SESSION['user'] = array_merge($u, registrar_permissions_from_account($row));
+    } catch (Throwable $exception) {
+        error_log('Registrar permission refresh failed: ' . $exception->getMessage());
+    }
+}
 
 function role_label(string $role): string
 {
@@ -123,6 +242,101 @@ function valid_person_name(string $name): bool
     return mb_strlen($name) >= 1
         && mb_strlen($name) <= 100
         && preg_match("/^[\p{L}][\p{L}\p{M} .,'-]*$/u", $name) === 1;
+}
+
+function normalize_name_part(?string $value): string
+{
+    return mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string)$value) ?? ''));
+}
+
+function student_duplicate_name_message(array $data, ?int $ignoreStudentId = null): ?string
+{
+    $first = normalize_name_part($data['first_name'] ?? '');
+    $middle = normalize_name_part($data['middle_name'] ?? '');
+    $last = normalize_name_part($data['last_name'] ?? '');
+    if ($first === '' || $last === '') {
+        return null;
+    }
+
+    $sql = 'SELECT student_number FROM students
+            WHERE LOWER(TRIM(first_name))=?
+              AND LOWER(TRIM(COALESCE(middle_name, \'\'))) = ?
+              AND LOWER(TRIM(last_name))=?';
+    $params = [$first, $middle, $last];
+    if ($ignoreStudentId) {
+        $sql .= ' AND id<>?';
+        $params[] = $ignoreStudentId;
+    }
+    $stmt = db()->prepare($sql . ' LIMIT 1');
+    $stmt->execute($params);
+    $studentNumber = $stmt->fetchColumn();
+    if ($studentNumber) {
+        return 'A student with this legal name is already in the student list (Student ID ' . $studentNumber . '). Open that record instead of creating a duplicate.';
+    }
+    return null;
+}
+
+function student_number_digits(?string $value): string
+{
+    return preg_replace('/\D+/', '', trim((string)$value)) ?? '';
+}
+
+function student_number_input_value(?string $value): string
+{
+    return student_number_digits($value);
+}
+
+/**
+ * @return array{status: string, student: ?array}
+ */
+function student_lookup_by_number_input(string $studentNumber, bool $forUpdate = false): array
+{
+    $input = trim($studentNumber);
+    $digits = student_number_digits($input);
+    if ($input === '' || $digits === '') {
+        return ['status' => 'missing', 'student' => null];
+    }
+
+    $sql = 'SELECT id, student_number, first_name, middle_name, last_name, username
+            FROM students
+            WHERE student_number=? OR REPLACE(student_number, \'-\', \'\')=?
+            ORDER BY id';
+    if ($forUpdate) {
+        $sql .= ' FOR UPDATE';
+    }
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$input, $digits]);
+    $matches = $stmt->fetchAll();
+    if (count($matches) === 0) {
+        return ['status' => 'missing', 'student' => null];
+    }
+    if (count($matches) > 1) {
+        return ['status' => 'ambiguous', 'student' => null];
+    }
+    return ['status' => 'found', 'student' => $matches[0]];
+}
+
+function canonical_student_number_for_update(string $studentNumber, ?int $currentStudentId, array &$errors): string
+{
+    $studentNumber = trim($studentNumber);
+    if ($studentNumber === '' || !valid_student_number_format($studentNumber)) {
+        return $studentNumber;
+    }
+
+    $lookup = student_lookup_by_number_input($studentNumber);
+    if ($lookup['status'] === 'ambiguous') {
+        $errors[] = 'Student ID matches more than one record after removing old hyphens. Ask the registrar to fix the duplicate IDs first.';
+        return $studentNumber;
+    }
+    $matched = $lookup['student'];
+    if ($matched && (int)$matched['id'] !== (int)$currentStudentId) {
+        $errors[] = 'That student ID is already assigned to another student.';
+        return $studentNumber;
+    }
+    if ($matched && (int)$matched['id'] === (int)$currentStudentId) {
+        return (string)$matched['student_number'];
+    }
+    return $studentNumber;
 }
 
 function csrf_token(): string
@@ -187,7 +401,7 @@ function validate_student(array $data, bool $studentSelfEdit = false, bool $allo
         if (course_name($data['course_id']??null)==='') $errors[]='Select a valid course.';
         $studentNumber = trim((string)($data['student_number'] ?? ''));
         if ($studentNumber !== '' && !valid_student_number_format($studentNumber)) {
-            $errors[] = 'Student ID must be 3–30 characters using letters, numbers, and hyphens (for example 2026-0001).';
+            $errors[] = 'Student ID must use numbers only (3–30 digits).';
         }
         if (($data['first_name'] ?? '') !== '' && !valid_person_name($data['first_name'])) $errors[] = 'First name must use letters and common name punctuation only.';
         if (($data['last_name'] ?? '') !== '' && !valid_person_name($data['last_name'])) $errors[] = 'Last name must use letters and common name punctuation only.';
@@ -212,12 +426,13 @@ function login_username_base(string $lastName, string $firstName): string
 function allocate_student_number(?int $year = null): string
 {
     $year = $year ?? (int)date('Y');
-    $prefix = $year . '-';
-    $stmt = db()->prepare('SELECT student_number FROM students WHERE student_number LIKE ?');
-    $stmt->execute([$prefix . '%']);
+    $prefix = (string)$year;
+    $stmt = db()->prepare('SELECT student_number FROM students WHERE student_number LIKE ? OR student_number LIKE ?');
+    $stmt->execute([$prefix . '%', $prefix . '-%']);
     $max = 0;
     foreach ($stmt as $row) {
-        if (preg_match('/^' . preg_quote($prefix, '/') . '(\d{4})$/', (string)$row['student_number'], $m)) {
+        $digits = student_number_digits((string)$row['student_number']);
+        if (preg_match('/^' . preg_quote($prefix, '/') . '(\d{4})$/', $digits, $m)) {
             $max = max($max, (int)$m[1]);
         }
     }
@@ -226,7 +441,7 @@ function allocate_student_number(?int $year = null): string
 
 function valid_student_number_format(string $value): bool
 {
-    return (bool)preg_match('/^[A-Za-z0-9][A-Za-z0-9-]{1,28}[A-Za-z0-9]$/', $value);
+    return (bool)preg_match('/^\d{3,30}$/', trim($value));
 }
 
 function allocate_login_username(string $lastName, string $firstName, ?int $ignoreStudentId = null, ?int $ignoreUserId = null): string
@@ -270,7 +485,7 @@ function username_taken(string $username, ?int $ignoreStudentId = null, ?int $ig
 
 function session_user_from_staff(array $account): array
 {
-    return [
+    $session = [
         'id' => (int)$account['id'],
         'full_name' => $account['full_name'],
         'username' => $account['username'],
@@ -278,6 +493,10 @@ function session_user_from_staff(array $account): array
         'role' => $account['role'],
         'account_type' => 'user',
     ];
+    if (($account['role'] ?? '') === 'registrar') {
+        $session = array_merge($session, registrar_permissions_from_account($account));
+    }
+    return $session;
 }
 
 function session_user_from_student(array $student): array
@@ -412,10 +631,20 @@ function deny_request(string $message, int $status = 403): never
     exit;
 }
 
-/** Fixed password used only by local demo seed scripts — never for live account issuance. */
+/**
+ * Temporary password for teachers, students, and registrars until first sign-in change.
+ * Set DEFAULT_TEMP_PASSWORD in .env (fallback DemoTemp1234). Also used by demo seed scripts.
+ */
+function default_temp_password(): string
+{
+    $configured = trim(env('DEFAULT_TEMP_PASSWORD', ''));
+    return $configured !== '' ? $configured : 'DemoTemp1234';
+}
+
+/** @deprecated Prefer default_temp_password(); kept for older seed scripts. */
 function demo_seed_password(): string
 {
-    return 'DemoTemp1234';
+    return default_temp_password();
 }
 
 function generate_temp_password(int $length = 14): string
@@ -444,6 +673,7 @@ function generate_temp_password(int $length = 14): string
 }
 
 /**
+ * Random one-time temporary password (administrators).
  * @return array{plain: string, hash: string}
  */
 function issue_temporary_password(?string $plain = null): array
@@ -453,6 +683,15 @@ function issue_temporary_password(?string $plain = null): array
         'plain' => $plain,
         'hash' => password_hash($plain, PASSWORD_DEFAULT),
     ];
+}
+
+/**
+ * Configured default temporary password for teachers, students, and registrars (create + reset).
+ * @return array{plain: string, hash: string}
+ */
+function issue_default_temporary_password(): array
+{
+    return issue_temporary_password(default_temp_password());
 }
 
 function password_is_strong(string $password): bool

@@ -1,5 +1,5 @@
 <div class="bar">
-  <div><h1>Blocks</h1><p class="muted">Group students into a block, then assign teachers by subject. Subject enrollments update only when you save or match a subject to the current students.</p></div>
+  <div><h1>Blocks</h1><p class="muted">Group students into a named block for one college year, then assign teachers by subject. The same block name may be used once per year (for example Block 1 · 1st year and Block 1 · 2nd year).</p></div>
   <a class="button" href="?page=blocks&amp;add=1#block-form">Add block</a>
 </div>
 <?php if ($blockMissing): errors($blockErrors); ?>
@@ -15,7 +15,15 @@
     <fieldset class="form-section">
       <legend>Block details</legend>
       <div class="grid">
-        <div><label for="block-name">Block name</label><input id="block-name" name="name" required maxlength="100" value="<?=e($blockInput['name'])?>" placeholder="For example, Block 1"></div>
+        <div><label for="block-name">Block name</label><input id="block-name" name="name" required maxlength="100" value="<?=e((string)($blockInput['name'] ?? ''))?>" placeholder="For example, Block 1"></div>
+        <div>
+          <label for="block-year">College year</label>
+          <select id="block-year" name="year_level" required>
+            <?php foreach (college_year_labels() as $y => $label): ?>
+            <option value="<?=(int)$y?>" <?=((string)($blockInput['year_level'] ?? '1')===(string)$y)?'selected':''?>><?=e($label)?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
       </div>
     </fieldset>
     <div class="actions"><button><?=$blockId ? 'Save block' : 'Create block'?></button><button type="button" class="secondary" data-close-dialog>Cancel</button></div>
@@ -26,7 +34,7 @@
     <div class="bar">
       <div>
         <h3 id="block-students-title">Students</h3>
-        <p class="muted"><?=count($rosterStudents)?> <?=count($rosterStudents)===1?'student':'students'?> in this block. Subject enrollments do not change automatically when you add or remove students.</p>
+      <p class="muted"><?=count($rosterStudents)?> <?=count($rosterStudents)===1?'student':'students'?> in this block (<?=e(college_year_label($blockInput['year_level'] ?? null))?>). Students added later enroll on this block’s subjects automatically.</p>
       </div>
       <?php if (!$assigningStudents): ?>
       <a class="button" href="?page=blocks&amp;edit=<?=(int)$blockId?>&amp;assign=1#block-students">Assign student to this block</a>
@@ -38,7 +46,7 @@
     <?php if ($assigningStudents): ?>
     <div class="assign-student-panel">
       <h4>Assign student to this block</h4>
-      <p class="muted">Search by name or student number (at least 2 characters). Choose <strong>Assign</strong> on a match — the whole school is never listed at once.</p>
+      <p class="muted">Search by name or student number (at least 2 characters). Only <?=e(college_year_label($blockInput['year_level'] ?? null))?> students are shown.</p>
       <?php if ($studentCatalogCount === 0): ?>
       <p class="empty-state">No students yet. Add student records before assigning them to a block.</p>
       <?php else: ?>
@@ -110,18 +118,15 @@
   </section>
 
   <section class="form-section assignment-panel" aria-labelledby="assignment-title">
-    <h3 id="assignment-title">Subject assignments</h3>
-    <p class="muted">Each row is one teacher teaching one subject in this block. Saving or matching a subject enrolls the current students (<?=(int)$memberCount?> student<?=$memberCount===1?'':'s'?>).</p>
-    <?php if (!empty($assignmentsNeedResync)): ?>
-    <div class="notice" role="status">Students in this block and subject enrollments differ for at least one subject. Use <strong>Match roster</strong> on those rows so enrollments catch up.</div>
-    <?php endif; ?>
+    <h3 id="assignment-title">Teachers on this block</h3>
+    <p class="muted">Assign a teacher and subject. Students added to this block (now or later) are enrolled on these subjects automatically.</p>
     <?php errors($assignmentErrors); ?>
     <?php if (!$teachers): ?><div class="notice">No active teachers are available. An administrator must create a Teacher/Staff account first.</div><?php endif; ?>
 
     <?php if ($assignments): ?>
     <div class="table-wrap assignment-table">
       <table>
-        <thead><tr><th scope="col">Code</th><th scope="col">Subject</th><th scope="col">Teacher</th><th scope="col">Enrolled</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <thead><tr><th scope="col">Code</th><th scope="col">Subject</th><th scope="col">Teacher</th><th scope="col">Students</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
           <?php foreach ($assignments as $assignment): ?>
           <tr<?php if ($assignment['row_class'] !== '') echo ' class="' . e($assignment['row_class']) . '"'; ?>>
@@ -129,19 +134,12 @@
             <td><?=e($assignment['subject_name'])?></td>
             <td><?=e($assignment['teacher_name'])?><?php if (!$assignment['teacher_active'] || $assignment['teacher_role'] !== 'staff'): ?> <span class="badge">Unavailable</span><?php endif; ?></td>
             <td><?=e((string)$assignment['enrollment_count'])?></td>
-            <td><?php if (!empty($assignment['needs_resync'])): ?><span class="badge badge-warn">Roster changed</span><?php else: ?><span class="muted">Matched</span><?php endif; ?></td>
             <td class="assignment-actions">
               <form method="post" action="?page=blocks&amp;edit=<?=e((string)$blockId)?>#assignment-title">
                 <?=csrf_field()?>
                 <input type="hidden" name="form" value="assignment">
                 <input type="hidden" name="assignment_id" value="<?=e((string)$assignment['id'])?>">
-                <?php if (!empty($assignment['needs_resync'])): ?>
-                <button type="submit" name="assignment_action" value="resync" data-confirm="<?=e($assignment['match_confirm'])?>">Match roster</button>
-                <?php endif; ?>
                 <button type="submit" name="assignment_action" value="edit" class="secondary">Edit</button>
-                <?php if (empty($assignment['needs_resync'])): ?>
-                <button type="submit" name="assignment_action" value="resync" class="secondary" data-confirm="<?=e($assignment['match_confirm'])?>">Match roster</button>
-                <?php endif; ?>
                 <button type="submit" name="assignment_action" value="delete" class="danger" data-confirm="<?=e($assignment['remove_confirm'])?>">Remove</button>
               </form>
             </td>
@@ -151,7 +149,7 @@
       </table>
     </div>
     <?php else: ?>
-    <p class="muted">No subjects assigned yet. Assign students above, then add a subject here.</p>
+    <p class="muted">No teachers assigned yet. You can assign teachers before or after students join the block.</p>
     <?php endif; ?>
 
     <form method="post" action="?page=blocks&amp;edit=<?=$blockId?>#assignment-title" class="assignment-form">
@@ -159,28 +157,34 @@
       <input type="hidden" name="form" value="assignment">
       <input type="hidden" name="assignment_action" value="save">
       <?php if ($editAssignmentId): ?><input type="hidden" name="assignment_id" value="<?=(int)$editAssignmentId?>"><?php endif; ?>
-      <h4><?=$editAssignmentId ? 'Edit subject assignment' : 'Add subject assignment'?></h4>
+      <h4><?=$editAssignmentId ? 'Edit teacher assignment' : 'Assign teacher'?></h4>
       <div class="grid">
-        <div>
+        <div class="searchable-select" data-searchable-select>
           <label for="assignment-teacher">Teacher</label>
-          <select id="assignment-teacher" name="teacher_id" required>
+          <input type="search" id="assignment-teacher-search" data-searchable-filter placeholder="Search teacher name" autocomplete="off" aria-controls="assignment-teacher"<?=!$availableTeachers?' disabled':''?>>
+          <select id="assignment-teacher" name="teacher_id" required data-searchable-target<?=!$availableTeachers?' disabled':''?>>
             <option value="">Select a teacher</option>
-            <?php foreach ($teachers as $teacher): ?>
+            <?php foreach ($availableTeachers as $teacher): ?>
             <option value="<?=$teacher['id']?>" <?=(string)$assignmentInput['teacher_id']===(string)$teacher['id']?'selected':''?>><?=e($teacher['full_name'])?></option>
             <?php endforeach; ?>
           </select>
+          <?php if ($teachers && !$availableTeachers && !$editAssignmentId): ?>
+          <p class="muted">Every active teacher is already assigned in this block.</p>
+          <?php endif; ?>
         </div>
         <div>
-          <label for="assignment-code">Subject code</label>
-          <input id="assignment-code" name="subject_code" required maxlength="30" value="<?=e($assignmentInput['subject_code'])?>" placeholder="For example, IT101" spellcheck="false" autocapitalize="characters">
-        </div>
-        <div>
-          <label for="assignment-name">Subject name</label>
-          <input id="assignment-name" name="subject_name" required maxlength="150" value="<?=e($assignmentInput['subject_name'])?>" placeholder="For example, Introduction to Computing">
+          <label for="assignment-subject">Subject</label>
+          <select id="assignment-subject" name="subject_id" required>
+            <option value="">Select a subject</option>
+            <?php foreach ($subjectOptions as $subject): ?>
+            <option value="<?=(int)$subject['id']?>" <?=(string)$assignmentInput['subject_id']===(string)$subject['id']?'selected':''?>><?=e(subject_label($subject))?></option>
+            <?php endforeach; ?>
+          </select>
+          <?php if (!$subjectOptions): ?><p class="muted">Add subjects under <a href="?page=subjects">Subjects</a> first.</p><?php endif; ?>
         </div>
       </div>
       <div class="actions">
-        <button <?=!$teachers?'disabled':''?>><?=$editAssignmentId ? 'Save and enroll current students' : 'Assign and enroll current students'?></button>
+        <button <?=(!$availableTeachers || !$subjectOptions)?'disabled':''?>><?=$editAssignmentId ? 'Save assignment' : 'Assign teacher'?></button>
         <?php if ($editAssignmentId): ?><a class="button secondary" href="?page=blocks&amp;edit=<?=$blockId?>#assignment-title">Cancel edit</a><?php endif; ?>
       </div>
     </form>
@@ -196,7 +200,7 @@
   <button>Search</button>
   <?php if ($blockSearch !== '' || $teacherFilter): ?><a href="?page=blocks">Clear search</a><?php endif; ?>
 </form>
-<?php if ($teacherFilter): ?><p class="muted">Showing blocks with a subject taught by the selected teacher. <a href="?page=teachers">Back to Teachers</a></p><?php endif; ?>
+<?php if ($teacherFilter): ?><p class="muted">Showing blocks with a subject taught by the selected teacher.<?php if ((user()['role'] ?? '') === 'admin'): ?> <a href="?page=teachers">Back to Teachers</a><?php endif; ?></p><?php endif; ?>
 <p class="muted"><?=$blockTotal?> <?=$blockTotal===1?'block':'blocks'?><?=$blockSearch!==''?' matching "'.e($blockSearch).'"':''?></p>
 <div class="table-wrap"><table>
   <thead><tr><th scope="col">Block</th><th scope="col">Subjects / Teachers</th><th scope="col">Students</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -212,11 +216,12 @@
       $chipLimit = 2;
       $visibleChips = array_slice($chips, 0, $chipLimit);
       $extraChips = max(0, count($chips) - $chipLimit);
+      $blockTitle = block_label($block);
       $editUrl = '?page=blocks&edit=' . (int)$block['id'] . '#block-form';
       $studentsUrl = '?page=blocks&edit=' . (int)$block['id'] . '#block-students';
     ?>
-    <tr class="row-link" data-href="<?=e($editUrl)?>" tabindex="0" aria-label="Open <?=e($block['name'])?>">
-      <td><strong><?=e($block['name'])?></strong></td>
+    <tr class="row-link" data-href="<?=e($editUrl)?>" tabindex="0" aria-label="Open <?=e($blockTitle)?>">
+      <td><strong><?=e((string)$block['name'])?></strong><br><span class="muted"><?=e(college_year_label($block['year_level'] ?? null))?></span></td>
       <td>
         <?php if ($visibleChips): ?>
         <ul class="subject-chips">
@@ -225,8 +230,8 @@
         </ul>
         <?php else: ?><span class="muted">No subjects yet</span><?php endif; ?>
       </td>
-      <td><a href="<?=e($studentsUrl)?>" aria-label="View <?=(int)$block['student_count']?> students in <?=e($block['name'])?>"><?=(int)$block['student_count']?></a></td>
-      <td><a href="<?=e($editUrl)?>" aria-label="Edit <?=e($block['name'])?>">Edit</a></td>
+      <td><a href="<?=e($studentsUrl)?>" aria-label="View <?=(int)$block['student_count']?> students in <?=e($blockTitle)?>"><?=(int)$block['student_count']?></a></td>
+      <td><a href="<?=e($editUrl)?>" aria-label="Edit <?=e($blockTitle)?>">Edit</a></td>
     </tr>
     <?php endforeach; ?>
     <?php if (!$blocks): ?><tr><td colspan="4" class="empty-state"><strong><?=$blockSearch!==''?'No matching blocks':'No blocks yet'?></strong><p><?=$blockSearch!==''?'Try another teacher, subject, or block name.':'Add a block, assign students, then assign teachers and subjects.'?></p></td></tr><?php endif; ?>

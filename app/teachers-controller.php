@@ -47,7 +47,7 @@ if (isset($_GET['add'])) {
         }
         if (!$teacherErrors) {
             $fullName = compose_full_name($createInput['first_name'], $createInput['middle_name'], $createInput['last_name']);
-            $issuedTemp = issue_temporary_password();
+            $issuedTemp = issue_default_temporary_password();
             db()->beginTransaction();
             try {
                 db()->prepare('INSERT INTO users(full_name,username,email,password_hash,role,must_change_password) VALUES(?,?,?,?,?,1)')->execute([
@@ -132,7 +132,7 @@ if ($editId) {
                 $params = [$fullName, $username, $input['email'], $isActive];
                 $sql = 'UPDATE users SET full_name=?, username=?, email=?, is_active=?';
                 if ($resetTemp) {
-                    $issuedTemp = issue_temporary_password();
+                    $issuedTemp = issue_default_temporary_password();
                     $sql .= ', password_hash=?, must_change_password=1, failed_attempts=0, locked_until=NULL';
                     $params[] = $issuedTemp['hash'];
                 }

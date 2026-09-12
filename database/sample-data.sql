@@ -1,15 +1,10 @@
--- SSIS portable sample data
--- Run in phpMyAdmin / MySQL after schema + migrations are applied.
--- Safe to re-run: deletes previous rows tagged as sample.
+-- LEGACY small sample dump — prefer: php database/seed-sample.php
+-- The PHP seeder rebuilds the full demo (20 teachers, 20 subjects, 20 blocks, 100 students, enrollment apps)
+-- while preserving administrator and registrar accounts.
 --
--- After import, copy enrollment document files:
---   php database/link-sample-enrollment-files.php
+-- This SQL file is kept only for older docs/workflows and no longer matches the full seed scale.
 --
--- Demo logins (temporary password DemoTemp1234, must change on first sign-in):
---   Teachers:   msantos / jdelacruz
---   Registrar:  rgarcia
---   Students:   Reyes_A, Garcia_B, Lopez_C, Ramos_D, Torres_E, Navarro_F, Mendoza_G, Villanueva_H
---   (exact student usernames depend on allocate rules; seed-sample.php prints them when used)
+-- After a PHP seed, demo teacher usernames are t1n1…t4n5 (temp password DemoTemp1234).
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -90,12 +85,12 @@ INSERT INTO students (
   student_number, first_name, last_name, email, phone, address,
   course, course_id, year_level, academic_status, username, password_hash, must_change_password
 ) VALUES
-  ('2026-0001', 'Ana', 'Reyes', 'ana.reyes@student.example.edu', '09181234001', 'Quezon City', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Reyes_A', @pwd, 1),
-  ('2026-0002', 'Ben', 'Garcia', 'ben.garcia@student.example.edu', '09181234002', 'Makati', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Garcia_B', @pwd, 1),
-  ('2026-0003', 'Carla', 'Lopez', 'carla.lopez@student.example.edu', '09181234003', 'Pasig', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Lopez_C', @pwd, 1),
-  ('2026-0004', 'Diego', 'Ramos', 'diego.ramos@student.example.edu', '09181234004', 'Marikina', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Ramos_D', @pwd, 1),
-  ('2026-0005', 'Elena', 'Torres', 'elena.torres@student.example.edu', '09181234005', 'Taguig', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Torres_E', @pwd, 1),
-  ('2026-0006', 'Felix', 'Navarro', 'felix.navarro@student.example.edu', '09181234006', 'Caloocan', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Navarro_F', @pwd, 1),
+  ('2026-0001', 'Ana', 'Reyes', 'ana.reyes@student.example.edu', '09181234001', 'Quezon City', 'Bachelor of Science in Information Technology', @course_bsit, 1, 'Active', 'Reyes_A', @pwd, 1),
+  ('2026-0002', 'Ben', 'Garcia', 'ben.garcia@student.example.edu', '09181234002', 'Makati', 'Bachelor of Science in Information Technology', @course_bsit, 1, 'Active', 'Garcia_B', @pwd, 1),
+  ('2026-0003', 'Carla', 'Lopez', 'carla.lopez@student.example.edu', '09181234003', 'Pasig', 'Bachelor of Science in Information Technology', @course_bsit, 2, 'Active', 'Lopez_C', @pwd, 1),
+  ('2026-0004', 'Diego', 'Ramos', 'diego.ramos@student.example.edu', '09181234004', 'Marikina', 'Bachelor of Science in Information Technology', @course_bsit, 2, 'Active', 'Ramos_D', @pwd, 1),
+  ('2026-0005', 'Elena', 'Torres', 'elena.torres@student.example.edu', '09181234005', 'Taguig', 'Bachelor of Science in Information Technology', @course_bsit, 3, 'Active', 'Torres_E', @pwd, 1),
+  ('2026-0006', 'Felix', 'Navarro', 'felix.navarro@student.example.edu', '09181234006', 'Caloocan', 'Bachelor of Science in Information Technology', @course_bsit, 3, 'Active', 'Navarro_F', @pwd, 1),
   ('2026-0007', 'Grace', 'Mendoza', 'grace.mendoza@student.example.edu', '09181234007', 'Manila', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Mendoza_G', @pwd, 1),
   ('2026-0008', 'Hugo', 'Villanueva', 'hugo.villanueva@student.example.edu', '09181234008', 'Parañaque', 'Bachelor of Science in Information Technology', @course_bsit, 4, 'Active', 'Villanueva_H', @pwd, 1);
 
@@ -108,31 +103,54 @@ SET @s6 := (SELECT id FROM students WHERE student_number='2026-0006');
 SET @s7 := (SELECT id FROM students WHERE student_number='2026-0007');
 SET @s8 := (SELECT id FROM students WHERE student_number='2026-0008');
 
-INSERT INTO blocks (name) VALUES ('Block 1');
+INSERT INTO blocks (name, year_level) VALUES ('Block 1', 1);
 SET @block1 := LAST_INSERT_ID();
-INSERT INTO blocks (name) VALUES ('Block 2');
+INSERT INTO blocks (name, year_level) VALUES ('Block 1', 2);
+SET @block1y2 := LAST_INSERT_ID();
+INSERT INTO blocks (name, year_level) VALUES ('Block 2', 3);
 SET @block2 := LAST_INSERT_ID();
+INSERT INTO blocks (name, year_level) VALUES ('Block 2', 4);
+SET @block2y4 := LAST_INSERT_ID();
 
 INSERT INTO block_students (block_id, student_id) VALUES
-  (@block1, @s1), (@block1, @s2), (@block1, @s3), (@block1, @s4),
-  (@block2, @s5), (@block2, @s6), (@block2, @s7), (@block2, @s8);
+  (@block1, @s1), (@block1, @s2),
+  (@block1y2, @s3), (@block1y2, @s4),
+  (@block2, @s5), (@block2, @s6),
+  (@block2y4, @s7), (@block2y4, @s8);
 
-INSERT INTO block_subject_assignments (block_id, teacher_id, subject_code, subject_name) VALUES
-  (@block1, @teacher_msantos, 'IT 421', 'Information Security');
+INSERT INTO subjects (code, title) VALUES
+  ('IT 421', 'Information Security'),
+  ('IT 411', 'Systems Analysis and Design'),
+  ('IT 101', 'Introduction to Computing'),
+  ('IT 201', 'Data Structures')
+ON DUPLICATE KEY UPDATE title=VALUES(title);
+SET @subj_it421 := (SELECT id FROM subjects WHERE code='IT 421' LIMIT 1);
+SET @subj_it411 := (SELECT id FROM subjects WHERE code='IT 411' LIMIT 1);
+SET @subj_it101 := (SELECT id FROM subjects WHERE code='IT 101' LIMIT 1);
+SET @subj_it201 := (SELECT id FROM subjects WHERE code='IT 201' LIMIT 1);
+
+INSERT INTO block_subject_assignments (block_id, teacher_id, subject_id, subject_code, subject_name) VALUES
+  (@block1, @teacher_msantos, @subj_it421, 'IT 421', 'Information Security');
 SET @asg1 := LAST_INSERT_ID();
-INSERT INTO block_subject_assignments (block_id, teacher_id, subject_code, subject_name) VALUES
-  (@block2, @teacher_jdela, 'IT 411', 'Systems Analysis and Design');
+INSERT INTO block_subject_assignments (block_id, teacher_id, subject_id, subject_code, subject_name) VALUES
+  (@block1y2, @teacher_msantos, @subj_it201, 'IT 201', 'Data Structures');
+SET @asg1b := LAST_INSERT_ID();
+INSERT INTO block_subject_assignments (block_id, teacher_id, subject_id, subject_code, subject_name) VALUES
+  (@block2, @teacher_jdela, @subj_it411, 'IT 411', 'Systems Analysis and Design');
 SET @asg2 := LAST_INSERT_ID();
+INSERT INTO block_subject_assignments (block_id, teacher_id, subject_id, subject_code, subject_name) VALUES
+  (@block2y4, @teacher_jdela, @subj_it101, 'IT 101', 'Introduction to Computing');
+SET @asg2b := LAST_INSERT_ID();
 
 INSERT INTO block_subject_enrollments (assignment_id, student_id, block_id, teacher_id, subject_code, subject_name, synced_at) VALUES
   (@asg1, @s1, @block1, @teacher_msantos, 'IT 421', 'Information Security', NOW()),
   (@asg1, @s2, @block1, @teacher_msantos, 'IT 421', 'Information Security', NOW()),
-  (@asg1, @s3, @block1, @teacher_msantos, 'IT 421', 'Information Security', NOW()),
-  (@asg1, @s4, @block1, @teacher_msantos, 'IT 421', 'Information Security', NOW()),
+  (@asg1b, @s3, @block1y2, @teacher_msantos, 'IT 201', 'Data Structures', NOW()),
+  (@asg1b, @s4, @block1y2, @teacher_msantos, 'IT 201', 'Data Structures', NOW()),
   (@asg2, @s5, @block2, @teacher_jdela, 'IT 411', 'Systems Analysis and Design', NOW()),
   (@asg2, @s6, @block2, @teacher_jdela, 'IT 411', 'Systems Analysis and Design', NOW()),
-  (@asg2, @s7, @block2, @teacher_jdela, 'IT 411', 'Systems Analysis and Design', NOW()),
-  (@asg2, @s8, @block2, @teacher_jdela, 'IT 411', 'Systems Analysis and Design', NOW());
+  (@asg2b, @s7, @block2y4, @teacher_jdela, 'IT 101', 'Introduction to Computing', NOW()),
+  (@asg2b, @s8, @block2y4, @teacher_jdela, 'IT 101', 'Introduction to Computing', NOW());
 
 INSERT INTO subject_score_items (assignment_id, term, category, title, max_score, sort_order) VALUES
   (@asg1, 'midterm', 'quiz', 'Quiz 1', 50, 1),
@@ -181,6 +199,30 @@ INSERT INTO enrollment_applications (
 ),
 (
   'pending', NULL, NULL, NULL,
+  'Reyes', 'Ana', NULL, 1,
+  'female', 'single', 'Filipino', '2006-05-10', 'Quezon City',
+  'ana.reyes@enroll.sample.edu', '09181234001',
+  '130000000', 'Metro Manila (NCR)', '137404000', 'Quezon City', '137404001', 'Diliman',
+  'Quezon City sample address', 'Sample Mother', 'Sample Father',
+  'Sample Mother', 'mother', '09190001018',
+  'moving_up', '2026-0001', 'This institution (moving up)', NULL, NULL,
+  @course_bsit, NULL, 2, '2026-2027', '1',
+  1, '127.0.0.1'
+),
+(
+  'pending', NULL, NULL, NULL,
+  'Garcia', 'Ben', NULL, 1,
+  'male', 'single', 'Filipino', '2006-02-18', 'Makati',
+  'ben.garcia@enroll.sample.edu', '09181234002',
+  '130000000', 'Metro Manila (NCR)', '137602000', 'City of Makati', '137602001', 'Poblacion',
+  'Makati sample address', 'Sample Mother', 'Sample Father',
+  'Sample Mother', 'mother', '09190001019',
+  'moving_up', '2026-0002', 'This institution (moving up)', NULL, NULL,
+  @course_bsit, NULL, 2, '2026-2027', '1',
+  1, '127.0.0.1'
+),
+(
+  'pending', NULL, NULL, NULL,
   'Lopez', 'Carla', NULL, 1,
   'female', 'single', 'Filipino', '2005-07-21', 'Pasig',
   'carla.lopez@enroll.sample.edu', '09181234003',
@@ -188,7 +230,19 @@ INSERT INTO enrollment_applications (
   'Pasig sample address', 'Maria Lopez', 'Jose Lopez',
   'Maria Lopez', 'mother', '09190001013',
   'moving_up', '2026-0003', 'This institution (moving up)', NULL, NULL,
-  @course_bsit, NULL, 2, '2026-2027', '1',
+  @course_bsit, NULL, 3, '2026-2027', '1',
+  1, '127.0.0.1'
+),
+(
+  'pending', NULL, NULL, NULL,
+  'Ramos', 'Diego', NULL, 1,
+  'male', 'single', 'Filipino', '2005-04-12', 'Marikina',
+  'diego.ramos@enroll.sample.edu', '09181234004',
+  '130000000', 'Metro Manila (NCR)', '137402000', 'City of Marikina', '137402001', 'San Roque',
+  'Marikina sample address', 'Lina Ramos', 'Carlo Ramos',
+  'Lina Ramos', 'mother', '09190001016',
+  'moving_up', '2026-0004', 'This institution (moving up)', NULL, NULL,
+  @course_bsit, NULL, 3, '2026-2027', '1',
   1, '127.0.0.1'
 ),
 (
@@ -200,7 +254,19 @@ INSERT INTO enrollment_applications (
   'Taguig sample address', 'Ruth Torres', 'Oscar Torres',
   'Ruth Torres', 'mother', '09190001014',
   'moving_up', '2026-0005', 'This institution (moving up)', NULL, NULL,
-  @course_bsit, NULL, 3, '2026-2027', '1',
+  @course_bsit, NULL, 4, '2026-2027', '1',
+  1, '127.0.0.1'
+),
+(
+  'pending', NULL, NULL, NULL,
+  'Navarro', 'Felix', NULL, 1,
+  'male', 'single', 'Filipino', '2004-08-18', 'Caloocan',
+  'felix.navarro@enroll.sample.edu', '09181234006',
+  '130000000', 'Metro Manila (NCR)', '137501000', 'City of Caloocan', '137501001', 'Barangay 1',
+  'Caloocan sample address', 'Nora Navarro', 'Luis Navarro',
+  'Nora Navarro', 'mother', '09190001017',
+  'moving_up', '2026-0006', 'This institution (moving up)', NULL, NULL,
+  @course_bsit, NULL, 4, '2026-2027', '1',
   1, '127.0.0.1'
 ),
 (

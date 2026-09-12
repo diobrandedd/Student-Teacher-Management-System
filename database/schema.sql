@@ -10,6 +10,10 @@ CREATE TABLE users (
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin','staff','registrar') NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  can_enrollments BOOLEAN NOT NULL DEFAULT FALSE,
+  can_blocking BOOLEAN NOT NULL DEFAULT FALSE,
+  can_assign_teachers BOOLEAN NOT NULL DEFAULT FALSE,
+  can_view_students BOOLEAN NOT NULL DEFAULT FALSE,
   failed_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
   last_login_at DATETIME NULL,
@@ -103,11 +107,22 @@ INSERT INTO teachers (user_id)
 SELECT id FROM users WHERE role = 'staff'
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
 
+CREATE TABLE IF NOT EXISTS subjects (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(30) NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_subjects_code (code)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS blocks (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    year_level TINYINT UNSIGNED NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_blocks_name_year (name, year_level)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS block_students (
@@ -123,14 +138,17 @@ CREATE TABLE IF NOT EXISTS block_subject_assignments (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     block_id BIGINT UNSIGNED NOT NULL,
     teacher_id BIGINT UNSIGNED NOT NULL,
+    subject_id BIGINT UNSIGNED NOT NULL,
     subject_code VARCHAR(30) NOT NULL,
     subject_name VARCHAR(150) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_block_subject_code (block_id, subject_code),
     INDEX idx_bsa_teacher (teacher_id),
+    INDEX idx_bsa_subject (subject_id),
     CONSTRAINT fk_bsa_block FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE,
-    CONSTRAINT fk_bsa_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT
+    CONSTRAINT fk_bsa_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_bsa_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS block_subject_enrollments (
@@ -276,6 +294,10 @@ CREATE TABLE IF NOT EXISTS enrollment_applications (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_enroll_status (status, created_at),
   INDEX idx_enroll_email (email),
+  INDEX idx_enroll_queue (status, academic_year, course_id, created_at),
+  INDEX idx_enroll_ay_sem (academic_year, semester),
+  INDEX idx_enroll_names (last_name, first_name),
+  INDEX idx_enroll_student_number (student_number),
   CONSTRAINT fk_enroll_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_enroll_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
   CONSTRAINT fk_enroll_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE RESTRICT,

@@ -2,17 +2,17 @@
 declare(strict_types=1);
 require_role(['admin']);
 require_once __DIR__ . '/blocks.php';
+require_once __DIR__ . '/subjects.php';
 
 $blockErrors = [];
 $assignmentErrors = [];
-$blockInput = ['name' => '', 'student_ids' => []];
-$assignmentInput = ['teacher_id' => '', 'subject_code' => '', 'subject_name' => ''];
+$blockInput = ['name' => '', 'year_level' => '1', 'student_ids' => []];
+$assignmentInput = ['teacher_id' => '', 'subject_id' => ''];
 $editAssignmentId = null;
 $blockId = filter_var($_GET['edit'] ?? null, FILTER_VALIDATE_INT) ?: null;
 $blockMissing = false;
 $assignments = [];
 $memberCount = 0;
-$assignmentsNeedResync = false;
 
 if ($blockId) {
     $statement = db()->prepare('SELECT * FROM blocks WHERE id=?');
@@ -37,25 +37,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blockMissing) {
         $assignmentId = filter_var($_POST['assignment_id'] ?? null, FILTER_VALIDATE_INT) ?: null;
         $assignmentInput = [
             'teacher_id' => is_scalar($_POST['teacher_id'] ?? null) ? (string)$_POST['teacher_id'] : '',
-            'subject_code' => is_string($_POST['subject_code'] ?? null) ? (string)$_POST['subject_code'] : '',
-            'subject_name' => is_string($_POST['subject_name'] ?? null) ? (string)$_POST['subject_name'] : '',
+            'subject_id' => is_scalar($_POST['subject_id'] ?? null) ? (string)$_POST['subject_id'] : '',
         ];
         try {
             if ($action === 'delete' && $assignmentId) {
                 delete_block_assignment(db(), $blockId, $assignmentId);
-                flash('success', 'Subject assignment removed.');
-                redirect('blocks', ['edit' => $blockId]);
-            }
-            if ($action === 'resync' && $assignmentId) {
-                $count = resync_block_assignment(db(), $blockId, $assignmentId);
-                flash('success', 'Enrollments now match the current students (' . $count . ' student' . ($count === 1 ? '' : 's') . ').');
+                flash('success', 'Teacher assignment removed.');
                 redirect('blocks', ['edit' => $blockId]);
             }
             if ($action === 'edit' && $assignmentId) {
                 $editAssignmentId = $assignmentId;
             } else {
                 save_block_assignment(db(), $blockId, $_POST, $assignmentId);
-                flash('success', $assignmentId ? 'Subject assignment updated and current students synced.' : 'Subject assigned. Current block students were synced.');
+                flash('success', $assignmentId ? 'Teacher assignment updated.' : 'Teacher assigned to this block.');
                 redirect('blocks', ['edit' => $blockId]);
             }
         } catch (InvalidArgumentException $exception) {
@@ -93,12 +87,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blockMissing) {
     } else {
         $blockInput = [
             'name' => is_string($_POST['name'] ?? null) ? $_POST['name'] : '',
+            'year_level' => is_scalar($_POST['year_level'] ?? null) ? (string)$_POST['year_level'] : '',
             'student_ids' => $blockInput['student_ids'] ?? [],
         ];
         try {
-            $savedId = save_block(db(), ['name' => $blockInput['name']], $blockId);
+            $savedId = save_block(db(), [
+                'name' => $blockInput['name'],
+                'year_level' => $blockInput['year_level'],
+            ], $blockId);
             if ($blockId) {
-                flash('success', 'Block name saved.');
+                flash('success', 'Block saved.');
                 redirect('blocks', ['edit' => $savedId]);
             }
             flash('success', 'Block created. Assign students next.');
@@ -113,6 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blockMissing) {
 }
 
 if ($blockId && !$blockMissing) {
+    // Keep teacher enrollments aligned when students were placed after teachers (or older data drifted).
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        sync_block_enrollments(db(), $blockId);
+    }
     $statement = db()->prepare(
         "SELECT a.*, u.full_name AS teacher_name, u.is_active AS teacher_active, u.role AS teacher_role,
             (SELECT COUNT(*) FROM block_subject_enrollments e WHERE e.assignment_id=a.id) AS enrollment_count
@@ -125,32 +127,17 @@ if ($blockId && !$blockMissing) {
     $statement->execute([$blockId]);
     $assignments = $statement->fetchAll();
     $memberCount = count($blockInput['student_ids']);
-    $memberIds = array_map('intval', $blockInput['student_ids']);
-    sort($memberIds);
     foreach ($assignments as &$assignmentRow) {
-        $enrolledStmt = db()->prepare('SELECT student_id FROM block_subject_enrollments WHERE assignment_id=? ORDER BY student_id');
-        $enrolledStmt->execute([(int)$assignmentRow['id']]);
-        $enrolledIds = array_map('intval', $enrolledStmt->fetchAll(PDO::FETCH_COLUMN));
-        $assignmentRow['needs_resync'] = $enrolledIds !== $memberIds;
-        $enrolled = (int)$assignmentRow['enrollment_count'];
-        $assignmentRow['match_confirm'] = 'Match enrollments for ' . $assignmentRow['subject_code']
-            . ' to the current roster of ' . $memberCount . ' student' . ($memberCount === 1 ? '' : 's')
-            . '? Currently enrolled: ' . $enrolled . '.';
-        $assignmentRow['remove_confirm'] = 'Remove ' . $assignmentRow['subject_code'] . ' and its enrollments from this block?';
-        $classes = [];
-        if ($editAssignmentId === (int)$assignmentRow['id']) $classes[] = 'is-editing';
-        if ($assignmentRow['needs_resync']) $classes[] = 'needs-resync';
-        $assignmentRow['row_class'] = implode(' ', $classes);
+        $assignmentRow['remove_confirm'] = 'Remove ' . $assignmentRow['subject_code'] . ' (' . $assignmentRow['teacher_name'] . ') from this block?';
+        $assignmentRow['row_class'] = $editAssignmentId === (int)$assignmentRow['id'] ? 'is-editing' : '';
     }
     unset($assignmentRow);
-    $assignmentsNeedResync = (bool)array_filter($assignments, fn($row) => !empty($row['needs_resync']));
     if ($editAssignmentId) {
         foreach ($assignments as $row) {
             if ((int)$row['id'] === $editAssignmentId) {
                 $assignmentInput = [
                     'teacher_id' => (string)$row['teacher_id'],
-                    'subject_code' => (string)$row['subject_code'],
-                    'subject_name' => (string)$row['subject_name'],
+                    'subject_id' => (string)($row['subject_id'] ?? ''),
                 ];
                 break;
             }
@@ -158,10 +145,22 @@ if ($blockId && !$blockMissing) {
     }
 } else {
     $memberCount = 0;
-    $assignmentsNeedResync = false;
 }
 
 $teachers = db()->query("SELECT t.id, u.full_name FROM teachers t JOIN users u ON u.id=t.user_id WHERE u.role='staff' AND u.is_active=1 ORDER BY u.full_name, t.id")->fetchAll();
+$subjectOptions = subjects_all();
+$currentTeacherId = (int)($assignmentInput['teacher_id'] ?? 0);
+$assignedTeacherIds = [];
+foreach ($assignments as $row) {
+    $tid = (int)($row['teacher_id'] ?? 0);
+    if ($tid > 0) {
+        $assignedTeacherIds[$tid] = true;
+    }
+}
+$availableTeachers = array_values(array_filter(
+    $teachers,
+    static fn(array $t): bool => (int)$t['id'] === $currentTeacherId || empty($assignedTeacherIds[(int)$t['id']])
+));
 
 $selectedStudents = array_values(array_unique(array_map('intval', $blockInput['student_ids'])));
 $rosterStudents = [];
@@ -177,13 +176,14 @@ if ($selectedStudents) {
     $rosterStudents = $statement->fetchAll();
 }
 
+$blockYearLevel = (int)($blockInput['year_level'] ?? 0);
 $studentSearch = is_string($_GET['student_q'] ?? null) ? trim($_GET['student_q']) : '';
 $studentSearchResults = [];
 $studentSearchTooShort = $studentSearch !== '' && mb_strlen($studentSearch) < 2;
-if (!$studentSearchTooShort && $studentSearch !== '') {
+if (!$studentSearchTooShort && $studentSearch !== '' && $blockYearLevel >= 1 && $blockYearLevel <= 4) {
     $like = '%' . strtr($studentSearch, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
     $excludeSql = '';
-    $params = [$like, $like, $like];
+    $params = [$blockYearLevel, $like, $like, $like];
     if ($selectedStudents) {
         $placeholders = implode(',', array_fill(0, count($selectedStudents), '?'));
         $excludeSql = " AND id NOT IN ($placeholders)";
@@ -193,6 +193,7 @@ if (!$studentSearchTooShort && $studentSearch !== '') {
         "SELECT id, student_number, first_name, last_name, course, year_level, is_active
          FROM students
          WHERE is_active=1
+           AND year_level=?
            AND (student_number LIKE ? ESCAPE '!' OR first_name LIKE ? ESCAPE '!' OR last_name LIKE ? ESCAPE '!')
            $excludeSql
          ORDER BY last_name, first_name, id
@@ -242,7 +243,7 @@ $statement = db()->prepare(
              AND (u.full_name LIKE ? ESCAPE '!' OR a.subject_code LIKE ? ESCAPE '!' OR a.subject_name LIKE ? ESCAPE '!')
          )
        )
-     ORDER BY b.name, b.id
+     ORDER BY b.year_level, b.name, b.id
      LIMIT 20 OFFSET $offset"
 );
 $statement->execute([$teacherFilter, $teacherFilter, $like, $like, $like, $like]);

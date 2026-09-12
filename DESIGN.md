@@ -318,7 +318,6 @@ A single institutional teal-green accent on cool mint paper, with soft sage part
 - **Muted** (400, 14px): Helper and empty-state supporting lines.
 - **Table** (400, 14px) / **Table head** (700, 13px): Data density with tabular nums.
 - **Badge** (400, 12px): Role chips.
-- **Stat** (700, 32px): Dashboard count figures.
 
 **The Weight-Over-Ornament Rule.** Emphasize with weight and size, never with decorative type, all-caps marketing labels, or a second display family unless product branding explicitly changes.
 
@@ -326,9 +325,9 @@ A single institutional teal-green accent on cool mint paper, with soft sage part
 
 Content lives in a centered `.wrap` lane (`max-width: 1184px`) with horizontal padding 32px (20px ≤600px). Header bar padding is 18px vertical; main content pads 36px top / 64px bottom (28px top on small screens).
 
-Page toolbars use `.bar` — space-between, wrap, 20px gap — pairing a title with a primary action. Staff forms use a two-column `.grid` (24px column gap) that collapses to one column ≤600px. Dashboard `.stats` is a three-column card row that stacks on small screens. Narrow auth/setup cards cap at 480px and center with generous top margin. Public **Enroll Now** uses the same card + grid language at a wider lane (`max-width: 960px`) with section jump chips under the intro.
+Page toolbars use `.bar` — space-between, wrap, 20px gap — pairing a title with a primary action. Staff forms use a two-column `.grid` (24px column gap) that collapses to one column ≤600px. Narrow auth/setup cards cap at 480px and center with generous top margin. Public **Enroll Now** uses the same card + grid language at a wider lane (`max-width: 960px`) with section jump chips under the intro.
 
-Search rows flex with a capped input (`max-width: 440px`) that expands on mobile. Tables sit in rounded `.table-wrap` shells and may scroll horizontally on small viewports (table `min-width: 620px` ≤600px). Breakpoints observed: 900px (nav full-width / More panel becomes static), 600px (grid/stats/spacing densify). Print hides chrome and actions.
+Search rows flex with a capped input (`max-width: 440px`) that expands on mobile. Tables sit in rounded `.table-wrap` shells and may scroll horizontally on small viewports (table `min-width: 620px` ≤600px). Breakpoints observed: 900px (nav full-width / More panel becomes static), 600px (grid/spacing densify). Print hides chrome and actions.
 
 **The Work-Lane Rule.** Keep primary records work inside the 1184px lane. Do not introduce full-bleed marketing bands or side-panel heroes into Operate screens.
 
@@ -341,7 +340,7 @@ Depth is almost entirely tonal. Cards, tables, header, and inputs sit flat on Qu
 - **Announcement lift** (`box-shadow: 0 16px 48px #12291f33`): Overlay completion announcements only.
 - **No ambient card shadow:** Cards and table wraps use border + fill only.
 
-**The Flat-By-Default Rule.** Surfaces are flat at rest. Shadows appear only when a surface must leave the page plane — dialogs (with scrim) and completion announcements (no scrim). Do not add drop shadows to cards, stats, or nav.
+**The Flat-By-Default Rule.** Surfaces are flat at rest. Shadows appear only when a surface must leave the page plane — dialogs (with scrim) and completion announcements (no scrim). Do not add drop shadows to cards, table wraps, or nav.
 
 ## Shapes
 
@@ -377,7 +376,9 @@ Refined and restrained — bold 14px labels, 44px min height, 6px radius, 10×18
 ### Navigation
 Header on white with bottom Pale Partition. Brand wordmark at 17px/700 Brand Ink. Links are 14px sage chips (44px tall, 6px radius); hover mist; current page uses Nav Current Mint + bold ink. Desktop nav stays on one row (`flex-wrap: nowrap`); Sign out stays visible at the end.
 
-**Admin overflow:** Daily records stay primary (Dashboard, Students, Teachers, Blocks, Enrollments, Reports). Catalog and administration (Courses, Departments, Grading system, Users, Audit logs, Settings) live under a native `<details class="nav-more">` **More** disclosure. The summary matches nav-chip sizing; open/current uses Nav Current Mint. The panel is a flat Surface White sheet (`min-width: 200px`, 10px radius, Pale Partition border, 8px padding, `z-index: 30`) — no shadow. On ≤900px the panel becomes static under the summary and the nav may wrap. Guest auth chrome is Enroll Now + Sign in only; registrar is Enrollments + Sign out; teacher and student walls stay short and flat.
+**Admin overflow:** No Dashboard. Primary admin modules stay in the top bar as labeled groups: **People** (Students, Teachers, Registrars), **Academics** (Blocks, Enrollments), and **Reports**. Catalog and administration (Courses, Departments, Grading system, Administrators, Audit logs, Settings) live under a native `<details class="nav-more">` **More** disclosure. The summary matches nav-chip sizing; open/current uses Nav Current Mint. The panel is a flat Surface White sheet (`min-width: 200px`, 10px radius, Pale Partition border, 8px padding, `z-index: 30`) — no shadow. On ≤900px the panel becomes static under the summary and the nav may wrap. Guest auth chrome is Enroll Now + Sign in only; registrar nav shows only admin-granted duties (Enrollments / Students / Blocking / Teachers) + signed-in name/badge + Sign out; teacher and student walls stay short and flat. Admin brand/home opens **Students**. Admin Academics includes Blocks, Blocking, Assign teachers, and Enrollments; **Subjects** lives under More beside Courses. Legacy `?page=dashboard` redirects to the role home.
+
+**Queue tools (Enrollments / Registrars / Blocking / Students):** Operate lists that need high-volume scanning use a shared `.queue-tools` stack: quiet **status tabs** (`.status-tabs` with tabular counts when applicable), a compact **filter panel** (`.filter-panel--queue` — search + Apply on the first row, dimension selects on a five-column second row; selects auto-submit), then a single `.queue-meta` line. Queue tables (`.queue-table`) use tighter row padding; when a single status tab is selected, omit the redundant Status column. Do not invent a second filter language for People directories.
 
 **The Overflow More Rule.** Collapse secondary admin modules into More when the top bar would wrap. Keep role walls intact. Do not replace them with a generic mega-menu or cross-role dump.
 
@@ -414,14 +415,15 @@ Off-screen until focus; white pill with 2px primary border — accessibility chr
 - **Do** preserve 44px minimum hit targets on buttons, nav, and table actions.
 - **Do** lift only dialogs (shadow + scrim) and completion announcements (shadow, no scrim); leave other surfaces flat.
 - **Do** announce completed saves as overlay announcements that do not shift the work lane.
-- **Do** collapse the form grid and stats to a single column at 600px.
+- **Do** collapse the form grid to a single column at 600px.
 - **Do** open record detail from a clickable table row into a modal dialog on the current list page.
-- **Do** keep admin primary modules in the top bar and put catalog/admin overflow under More when the bar would wrap.
+- **Do** keep admin primary modules grouped (People / Academics / Reports) in the top bar and put catalog/admin overflow under More when the bar would wrap.
 - **Do** use enrollment status chips (pending / approved / rejected) on the Enrollments queue.
+- **Do** send administrators to Students as home — no Dashboard.
 
 ### Don't:
 - **Don't** introduce purple/indigo SaaS gradients, glow accents, or dark-mode shells.
-- **Don't** add ambient shadows under cards, stats, or the header — including the More dropdown panel.
+- **Don't** add ambient shadows under cards, table wraps, or the header — including the More dropdown panel.
 - **Don't** insert an in-flow mint rectangle after a successful action; that pattern is reserved for in-context notices, not completions.
 - **Don't** use pill-full radii, floating badge stickers, or icon-tile marketing headers.
 - **Don't** invent school logos, testimonials, or support contacts in chrome — college/university name comes from settings.

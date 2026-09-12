@@ -6,7 +6,7 @@ A deliberately minimal PHP 8.1+ and MySQL/MariaDB system for the midterm require
 
 - Secure login (staff/admin via `users`, students via credentials on the student record), generic authentication errors, five-attempt/15-minute lockout, password hashing, and session ID rotation
 - Role-based authorization on every protected route
-- Administrator and Teacher/Staff accounts in **Users**; student usernames live on the student form
+- Administrator accounts in **Administrators**; teachers in **Teachers**; registrars in **Registrars**; student usernames live on the student form
 - Administrator student search, record updates, CSV reports, blocks, and catalog
 - Teachers use **Assigned Blocks** (home), **My subjects**, and **My profile** only — draft scores then submit midterm/finals
 - Administrator **Grading system** for category and term weights
@@ -25,42 +25,35 @@ A deliberately minimal PHP 8.1+ and MySQL/MariaDB system for the midterm require
 5. Visit `?page=setup` once and create the initial administrator. Setup automatically becomes unavailable after the first user exists.
 6. Sign in as administrator, then create accounts as follows:
    - **Teachers:** use **Teachers → Add teacher** (profile + login together). A one-time temporary password is shown after create; they must change it on first sign-in.
+   - **Registrars:** use **Registrars → Add registrar** (duties start unchecked — grant Enrollments / Students / Blocking / Teachers as needed). A one-time temporary password is shown after create.
    - **Students:** use **Students → Add student**. A one-time temporary password is shown after create (no password to type on create). Edit can reset a new temporary password.
-   - **Administrators / other staff logins:** use **Users** (Teacher/Staff, Registrar, or Administrator). A one-time temporary password is shown after create or reset.
+   - **Administrators:** use **More → Administrators**. A one-time temporary password is shown after create or reset.
 
 ## Sample data (local demos)
 
-Two equivalent ways to load the same demo set (department, BSIT/BSCS, teachers, 8 students, blocks, grading items, registrar, and enrollment applications including **New student** and **Moving up**).
-
-### Option A — PHP seeder (recommended on this machine)
+Rebuild a full demo set with:
 
 ```bash
 php database/migrate.php
 php database/seed-sample.php
 ```
 
-### Option B — SQL file on another computer
+The seeder **keeps administrator and registrar accounts**, replaces sample staff/teachers, and loads:
 
-1. Import `database/schema.sql` (or run migrations) on that machine.
-2. In phpMyAdmin / MySQL, import `database/sample-data.sql`.
-3. From the project root, attach the sample PSA/ID files:
+| Item | Count |
+|------|-------|
+| Teachers | 20 (5 per college year; usernames `t1n1`…`t4n5`) |
+| Subjects | 20 (`IT 1xx` / `2xx` / `3xx` / `4xx`) |
+| Blocks | 20 (`Block 1`–`5` × years 1–4) |
+| Students | 100 (5 per block; IDs `2026-0001`…`0100`) |
+| New enrollments | 5 pending (1st year) |
+| Moving up | 15 pending (5 into each of years 2–4) |
 
-```bash
-php database/link-sample-enrollment-files.php
-```
+Demo temporary password for seeded teachers/students comes from `DEFAULT_TEMP_PASSWORD` in `.env` (default `DemoTemp1234`; must change on first sign-in). Existing registrars (e.g. `rgarcia`, `Klint_R`) and admins are left as-is.
 
-Demo accounts (temporary password `DemoTemp1234`; must change on first sign-in):
+Open **Enrollments** as a registrar/admin: filter **New student** for 1st-year applicants, **Moving up** + year for advancement apps.
 
-| Role | Username |
-|------|----------|
-| Teacher | `msantos`, `jdelacruz` |
-| Registrar | `rgarcia` |
-| Students | `Reyes_A` … `Villanueva_H` (see students list) |
-
-Live account creation and enrollment approval issue a **random** one-time temporary password shown only to the admin/registrar after save — not a fixed shared secret.
-
-Sample enrollments use emails `*@enroll.sample.edu` (4 pending: 2 new without Student ID yet + 2 moving up with `2026-0003` / `2026-0005`; 1 rejected). Open **Enrollments** as `rgarcia` or an admin. Demo students use IDs `2026-0001` … `2026-0008`.
-
+`database/sample-data.sql` is a smaller legacy dump; prefer `seed-sample.php` for the current scale.
 ## Recommended production settings
 
 - Serve only over HTTPS and set `APP_ENV=production`.
@@ -89,7 +82,7 @@ Sample enrollments use emails `*@enroll.sample.edu` (4 pending: 2 new without St
 
 ## Student portal
 
-- Students sign in with the username on their record (`Lastname_F` pattern). New accounts get a one-time temporary password (shown to staff on create/approve); they must change it on first sign-in. Sample seed accounts use `DemoTemp1234`.
+- Students sign in with the username on their record (`Lastname_F` pattern). New teacher/student/registrar accounts use `DEFAULT_TEMP_PASSWORD` from `.env` (shown to staff on create/approve/reset); they must change it on first sign-in. Sample seed accounts use the same value. Administrators still get a random one-time temporary password.
 - Home is **My Subjects**. Click a subject to open teacher + midterm / finals / overall (only after the teacher submits that term).
 - **My profile**: first, middle, and last name are read-only; display name, email, phone, and address are editable. Username is read-only.
 
@@ -97,11 +90,12 @@ Sample enrollments use emails `*@enroll.sample.edu` (4 pending: 2 new without St
 
 The **Teachers** module lists Teacher/Staff accounts with name, email, status, and assigned block count. Search by name or email, open a teacher’s blocks, or (as administrator) **Add teacher** to create both the profile and login (one-time temporary password shown after create). Administrators manage the directory; teachers do not open this module.
 
-- Administrators open **Blocks**, select **Add block**, name the block, and manage students and subject assignments.
+- Administrators open **Blocks** to create/rename year-scoped blocks and manage rosters. **Blocking** (admin + registrars with Blocking duty) places active students who are not yet in any block into a matching college-year block. **Assign teachers** (admin) / **Teachers** (registrars with Teachers duty) assigns catalog subjects + teachers from a teacher-first list.
+- Admin **Subjects** (under More) defines subject code + title used in those assignments.
 - Search the block list by teacher name or block name. Results are paginated. **Edit** opens the block. Under **Students**, use **Assign student to this block** to search and assign one student at a time, or **Remove** on a row. The whole school is never listed as a checklist.
 - A student may belong to multiple blocks; duplicate assignment within the same block is prevented.
-- Teacher records link to Teacher/Staff accounts in Users. Existing staff accounts are backfilled by the migration; new or updated staff accounts are registered automatically.
-- Existing installations: run `C:\xampp\php\php.exe database\migrate.php` from the project directory. The migration is repeatable and preserves existing records. Fresh installations include the tables in `database/schema.sql`.
+- Teacher records link to Teacher/Staff accounts managed under **Teachers**. Existing staff accounts are backfilled by the migration; new or updated staff accounts are registered automatically.
+- Existing installations: run `C:\xampp\php\php.exe database\migrate.php` from the project directory (includes subjects catalog). Fresh installations include the tables in `database/schema.sql`.
 - Run `C:\xampp\php\php.exe tests\blocks.php` to verify assignment rules using temporary tables, without changing existing data.
 
 ## CIA principles
@@ -112,7 +106,7 @@ The **Teachers** module lists Teacher/Staff accounts with name, email, status, a
 
 ## Quick verification checklist
 
-- An anonymous user cannot open dashboard, student, user, log, settings, or report pages.
+- An anonymous user cannot open student, user, log, settings, or report pages.
 - Staff cannot open users, logs, or settings; students cannot open student management or reports.
 - Invalid CSRF tokens are rejected; apostrophes and HTML in data cannot cause SQL injection or stored XSS.
 - Five failed sign-ins lock an account for 15 minutes without revealing whether it exists.

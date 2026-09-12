@@ -4,17 +4,22 @@ require_once __DIR__ . '/enrollment.php';
 
 $page = $_GET['page'] ?? '';
 $enrollErrors = [];
+$enrollFieldErrors = [];
 $enrollInput = enrollment_empty_input();
 $enrollSubmitted = false;
-$enrollmentStatusFilter = trim((string)($_GET['status'] ?? 'pending'));
-if (!in_array($enrollmentStatusFilter, ['pending', 'approved', 'rejected', 'all'], true)) {
-    $enrollmentStatusFilter = 'pending';
-}
+$enrollmentFilters = enrollment_list_filters_from_request();
+$enrollmentStatusFilter = $enrollmentFilters['status'];
 $enrollmentId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: null;
 $selectedEnrollment = null;
 $selectedDocuments = [];
 $reviewErrors = [];
 $courseOptions = [];
+$applications = [];
+$enrollmentTotal = 0;
+$enrollmentPages = 1;
+$enrollmentPage = 1;
+$enrollmentStatusCounts = ['pending' => 0, 'approved' => 0, 'rejected' => 0, 'all' => 0];
+$enrollmentAcademicYears = [];
 
 if ($page === 'enroll') {
     if (user()) {
@@ -32,13 +37,16 @@ if ($page === 'enroll') {
             $enrollErrors[] = $rateError;
         } else {
             $enrollInput = enrollment_collect_post();
-            $enrollErrors = enrollment_validate($enrollInput, true);
+            $validated = enrollment_validate($enrollInput, true);
+            $enrollErrors = $validated['messages'];
+            $enrollFieldErrors = $validated['fields'];
             if (!$enrollErrors) {
                 try {
                     enrollment_submit($enrollInput);
                     enrollment_rate_limit_hit();
                     $enrollSubmitted = true;
                     $enrollInput = enrollment_empty_input();
+                    $enrollFieldErrors = [];
                 } catch (Throwable $e) {
                     error_log($e->getMessage());
                     $enrollErrors[] = 'Could not save your application. Please try again.';
@@ -49,7 +57,7 @@ if ($page === 'enroll') {
 }
 
 if ($page === 'enrollment_document') {
-    require_role(['admin', 'registrar']);
+    require_registrar_capability('enrollments');
     $docId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
     $doc = enrollment_document($docId);
     if (!$doc) {
@@ -59,13 +67,20 @@ if ($page === 'enrollment_document') {
 }
 
 if ($page === 'enrollments') {
-    require_role(['admin', 'registrar']);
+    require_registrar_capability('enrollments');
     try {
         $courseOptions = db()->query('SELECT id, name FROM courses ORDER BY name')->fetchAll();
     } catch (Throwable) {
         $courseOptions = [];
     }
-    $applications = enrollment_list($enrollmentStatusFilter === 'all' ? null : $enrollmentStatusFilter, trim((string)($_GET['q'] ?? '')));
+    $enrollmentAcademicYears = enrollment_academic_years();
+    $list = enrollment_list_page($enrollmentFilters);
+    $applications = $list['rows'];
+    $enrollmentTotal = $list['total'];
+    $enrollmentPages = $list['pages'];
+    $enrollmentPage = $list['page'];
+    $enrollmentStatusCounts = $list['status_counts'];
+    $enrollmentFilters['page'] = $enrollmentPage;
 
     if ($enrollmentId) {
         $selectedEnrollment = enrollment_fetch($enrollmentId);
@@ -80,6 +95,9 @@ if ($page === 'enrollments') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && $enrollmentId) {
         verify_csrf();
         $action = (string)($_POST['review_action'] ?? '');
+        $returnFilters = enrollment_list_filters_from_request();
+        $returnFilters['status'] = 'pending';
+        $returnFilters['page'] = 1;
         try {
             if ($action === 'approve') {
                 $studentId = enrollment_approve($enrollmentId, (int)user()['id']);
@@ -94,12 +112,12 @@ if ($page === 'enrollments') {
                 } else {
                     flash('success', 'Enrollee approved. Student ID ' . ($row['student_number'] ?? '') . '; username ' . ($row['username'] ?? '') . '; temporary password ' . $tempPlain . '. Share it privately — they must change it on first sign-in.');
                 }
-                redirect('enrollments', ['status' => 'pending']);
+                redirect('enrollments', array_diff_key(enrollment_list_query_params($returnFilters), ['page' => true]));
             }
             if ($action === 'reject') {
                 enrollment_reject($enrollmentId, (int)user()['id'], (string)($_POST['reject_reason'] ?? ''));
                 flash('success', 'Application rejected.');
-                redirect('enrollments', ['status' => 'pending']);
+                redirect('enrollments', array_diff_key(enrollment_list_query_params($returnFilters), ['page' => true]));
             }
             $reviewErrors[] = 'Unknown review action.';
         } catch (InvalidArgumentException $e) {

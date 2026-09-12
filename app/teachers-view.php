@@ -1,5 +1,5 @@
 <div class="bar">
-  <div><h1>Teachers</h1><p class="muted">Create teacher profiles here. Username is auto-built from last name + first initial; a one-time temporary password is shown after create (must change on first sign-in). Administrators can also manage the same accounts under Users.</p></div>
+  <div><h1>Teachers</h1><p class="muted">Create teacher profiles here. Username is auto-built from last name + first initial; a one-time temporary password is shown after create (must change on first sign-in).</p></div>
   <?php if ($canManage): ?><a class="button" href="?page=teachers&amp;add=1">Add teacher</a><?php endif; ?>
 </div>
 <?php

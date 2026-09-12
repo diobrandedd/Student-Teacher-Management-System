@@ -196,4 +196,74 @@ if (!(int)$col->fetchColumn()) {
     db()->exec('ALTER TABLE enrollment_applications ADD COLUMN student_number VARCHAR(30) NULL AFTER application_type');
 }
 
+$subjectsTable = db()->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='subjects'")->fetchColumn();
+$col->execute(['block_subject_assignments', 'subject_id']);
+$needsSubjects = !(int)$subjectsTable || !(int)$col->fetchColumn();
+if ($needsSubjects) {
+    passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . 'migrate-subjects.php'));
+}
+
+foreach (
+    [
+        'can_enrollments' => 'ALTER TABLE users ADD COLUMN can_enrollments BOOLEAN NOT NULL DEFAULT FALSE AFTER is_active',
+        'can_blocking' => 'ALTER TABLE users ADD COLUMN can_blocking BOOLEAN NOT NULL DEFAULT FALSE AFTER can_enrollments',
+        'can_assign_teachers' => 'ALTER TABLE users ADD COLUMN can_assign_teachers BOOLEAN NOT NULL DEFAULT FALSE AFTER can_blocking',
+        'can_view_students' => 'ALTER TABLE users ADD COLUMN can_view_students BOOLEAN NOT NULL DEFAULT FALSE AFTER can_assign_teachers',
+    ] as $permCol => $alterSql
+) {
+    $col->execute(['users', $permCol]);
+    if (!(int)$col->fetchColumn()) {
+        db()->exec($alterSql);
+        // Existing registrar accounts keep prior open access when a flag is first introduced.
+        if ($permCol === 'can_view_students') {
+            db()->exec("UPDATE users SET can_view_students=1 WHERE role='registrar'");
+        } elseif (in_array($permCol, ['can_enrollments', 'can_blocking', 'can_assign_teachers'], true)) {
+            db()->exec("UPDATE users SET `$permCol`=1 WHERE role='registrar'");
+        }
+    }
+}
+
+$col->execute(['blocks', 'year_level']);
+if (!(int)$col->fetchColumn()) {
+    db()->exec('ALTER TABLE blocks ADD COLUMN year_level TINYINT UNSIGNED NOT NULL DEFAULT 1 AFTER name');
+    $blockIds = db()->query('SELECT id FROM blocks')->fetchAll(PDO::FETCH_COLUMN);
+    $majority = db()->prepare(
+        'SELECT s.year_level
+         FROM block_students bs
+         JOIN students s ON s.id=bs.student_id
+         WHERE bs.block_id=?
+         GROUP BY s.year_level
+         ORDER BY COUNT(*) DESC, s.year_level ASC
+         LIMIT 1'
+    );
+    $setYear = db()->prepare('UPDATE blocks SET year_level=? WHERE id=?');
+    foreach ($blockIds as $bid) {
+        $majority->execute([(int)$bid]);
+        $year = (int)$majority->fetchColumn();
+        if ($year >= 1 && $year <= 4) {
+            $setYear->execute([$year, (int)$bid]);
+        }
+    }
+    $idxRows = db()->query(
+        "SELECT DISTINCT INDEX_NAME, NON_UNIQUE FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='blocks' AND COLUMN_NAME='name'"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($idxRows as $indexRow) {
+        $indexName = (string)$indexRow['INDEX_NAME'];
+        if ($indexName === 'PRIMARY' || $indexName === 'uq_blocks_name_year') {
+            continue;
+        }
+        if ((int)$indexRow['NON_UNIQUE'] === 0) {
+            db()->exec('ALTER TABLE blocks DROP INDEX `' . str_replace('`', '``', $indexName) . '`');
+        }
+    }
+    $uq = db()->query(
+        "SELECT COUNT(*) FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='blocks' AND INDEX_NAME='uq_blocks_name_year'"
+    )->fetchColumn();
+    if (!(int)$uq) {
+        db()->exec('ALTER TABLE blocks ADD UNIQUE KEY uq_blocks_name_year (name, year_level)');
+    }
+}
+
 echo "Migrations applied. Existing records and course names preserved.\n";

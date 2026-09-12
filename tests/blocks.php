@@ -5,7 +5,7 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 require dirname(__DIR__) . '/app/blocks.php';
 $pdo = db();
 // Connection-local tables shadow the real tables; no existing rows are touched.
-foreach (['users', 'teachers', 'students', 'blocks', 'block_students', 'block_subject_assignments', 'block_subject_enrollments', 'audit_logs', 'courses', 'departments'] as $table) {
+foreach (['users', 'teachers', 'students', 'blocks', 'block_students', 'subjects', 'block_subject_assignments', 'block_subject_enrollments', 'audit_logs', 'courses', 'departments'] as $table) {
     $ddl = $pdo->query("SHOW CREATE TABLE $table")->fetch(PDO::FETCH_NUM)[1];
     $ddl = preg_replace('/CREATE TABLE/', 'CREATE TEMPORARY TABLE', $ddl, 1);
     $ddl = preg_replace('/,?\n\s*CONSTRAINT[^\n]+/', '', $ddl);
@@ -18,48 +18,57 @@ sync_teacher(1);
 sync_teacher(2);
 sync_teacher(3);
 $pdo->exec("INSERT INTO students(id,student_number,first_name,last_name,email,course,year_level) VALUES(1,'100','Test','One','one@example.invalid','Test',1),(2,'200','Test','Two','two@example.invalid','Test',1),(3,'300','Test','Three','three@example.invalid','Test',1)");
+$pdo->exec("INSERT INTO subjects(id,code,title) VALUES(1,'MATH101','College Algebra'),(2,'ENG101','Communication'),(3,'SCI101','Science')");
 function check(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
 function rejected(callable $action, string $message): void {
     try { $action(); } catch (InvalidArgumentException $e) { return; }
     throw new RuntimeException($message);
 }
 check((int)$pdo->query('SELECT COUNT(*) FROM teachers')->fetchColumn()===2, 'Teacher sync must be idempotent and staff-only.');
-$a = save_block($pdo, ['name'=>'Block A','student_ids'=>[1,2,2]]);
-$b = save_block($pdo, ['name'=>'Block B','student_ids'=>[1]]);
+$a = save_block($pdo, ['name'=>'Block A','year_level'=>1,'student_ids'=>[1,2,2]]);
+$b = save_block($pdo, ['name'=>'Block B','year_level'=>1,'student_ids'=>[1]]);
 check((int)$pdo->query('SELECT COUNT(*) FROM block_students WHERE student_id=1')->fetchColumn()===2, 'Student must be assignable to multiple blocks.');
 check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE block_id=$a")->fetchColumn()===2, 'Duplicate selections must not duplicate membership.');
-save_block($pdo, ['name'=>'Block A updated','student_ids'=>[2]], $a);
+save_block($pdo, ['name'=>'Block A updated','year_level'=>1,'student_ids'=>[2]], $a);
 check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE student_id=1 AND block_id=$b")->fetchColumn()===1, 'Editing a block must preserve other memberships.');
-rejected(fn()=>save_block($pdo, ['name'=>'Block B','student_ids'=>[1]], $a), 'Duplicate block name should fail.');
+rejected(fn()=>save_block($pdo, ['name'=>'Block B','year_level'=>1,'student_ids'=>[1]], $a), 'Duplicate block name for the same year should fail.');
+$sameNameOtherYear = save_block($pdo, ['name'=>'Block B','year_level'=>2,'student_ids'=>[]]);
+check($sameNameOtherYear > 0, 'Same block name must be allowed for a different college year.');
+check(block_label(['name'=>'Block 1','year_level'=>1])==='Block 1 · 1st year', 'block_label must include college year');
 check($pdo->query("SELECT name FROM blocks WHERE id=$a")->fetchColumn()==='Block A updated', 'Failed edit must roll back.');
-rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[999]]), 'Unknown student must fail.');
-save_block($pdo, ['name'=>'Empty allowed','student_ids'=>[]], $a);
+rejected(fn()=>save_block($pdo, ['name'=>'Invalid','year_level'=>1,'student_ids'=>[999]]), 'Unknown student must fail.');
+save_block($pdo, ['name'=>'Empty allowed','year_level'=>1,'student_ids'=>[]], $a);
 check((int)$pdo->query("SELECT COUNT(*) FROM block_students WHERE block_id=$a")->fetchColumn()===0, 'Clearing students must leave an empty block.');
-save_block($pdo, ['name'=>'Block A updated','student_ids'=>[2]], $a);
-rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[[1]]]), 'Malformed students must fail.');
+save_block($pdo, ['name'=>'Block A updated','year_level'=>1,'student_ids'=>[2]], $a);
+rejected(fn()=>save_block($pdo, ['name'=>'Invalid','year_level'=>1,'student_ids'=>[[1]]]), 'Malformed students must fail.');
 $pdo->exec('UPDATE students SET is_active=0 WHERE id=1');
-rejected(fn()=>save_block($pdo, ['name'=>'Invalid','student_ids'=>[1]]), 'Inactive student must fail.');
-check((int)$pdo->query('SELECT COUNT(*) FROM blocks')->fetchColumn()===2, 'Rejected requests must not leave blocks.');
+rejected(fn()=>save_block($pdo, ['name'=>'Invalid','year_level'=>1,'student_ids'=>[1]]), 'Inactive student must fail.');
+check((int)$pdo->query('SELECT COUNT(*) FROM blocks')->fetchColumn()===3, 'Rejected requests must not leave blocks.');
 
 $teacherOne = (int)$pdo->query('SELECT id FROM teachers WHERE user_id=1')->fetchColumn();
 $teacherTwo = (int)$pdo->query('SELECT id FROM teachers WHERE user_id=3')->fetchColumn();
-save_block($pdo, ['name'=>'Block B','student_ids'=>[1]], $b);
-$assignMath = save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_code'=>'MATH101','subject_name'=>'College Algebra']);
+save_block($pdo, ['name'=>'Block B','year_level'=>1,'student_ids'=>[1]], $b);
+$assignMath = save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_id'=>1]);
 check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_enrollments WHERE assignment_id=$assignMath")->fetchColumn()===1, 'Assignment must snapshot current members.');
-save_block($pdo, ['name'=>'Block B','student_ids'=>[1,2]], $b);
-check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_enrollments WHERE assignment_id=$assignMath")->fetchColumn()===1, 'Roster edits must not auto-sync enrollments.');
+save_block($pdo, ['name'=>'Block B','year_level'=>1,'student_ids'=>[1,2]], $b);
+check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_enrollments WHERE assignment_id=$assignMath")->fetchColumn()===2, 'Adding students to a block must auto-enroll them on assigned subjects.');
 $synced = resync_block_assignment($pdo, $b, $assignMath);
 check($synced===2 && (int)$pdo->query("SELECT COUNT(*) FROM block_subject_enrollments WHERE assignment_id=$assignMath")->fetchColumn()===2, 'Re-sync must refresh enrollments from current members.');
-$assignEng = save_block_assignment($pdo, $b, ['teacher_id'=>$teacherTwo,'subject_code'=>'ENG101','subject_name'=>'Communication']);
+$assignEng = save_block_assignment($pdo, $b, ['teacher_id'=>$teacherTwo,'subject_id'=>2]);
 check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_assignments WHERE block_id=$b")->fetchColumn()===2, 'A block may have multiple teacher-subject assignments.');
-rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_code'=>'MATH101','subject_name'=>'Repeat']), 'Duplicate subject code in a block must fail.');
-rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>999,'subject_code'=>'SCI101','subject_name'=>'Science']), 'Unknown teacher must fail.');
+rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_id'=>1]), 'Duplicate subject code in a block must fail.');
+rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>999,'subject_id'=>3]), 'Unknown teacher must fail.');
+rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_id'=>999]), 'Unknown subject must fail.');
 $pdo->exec('UPDATE users SET is_active=0 WHERE id=1');
-rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_code'=>'SCI101','subject_name'=>'Science']), 'Inactive teacher must fail.');
+rejected(fn()=>save_block_assignment($pdo, $b, ['teacher_id'=>$teacherOne,'subject_id'=>3]), 'Inactive teacher must fail.');
 $pdo->exec('UPDATE users SET is_active=1 WHERE id=1');
 delete_block_assignment($pdo, $b, $assignEng);
 check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_assignments WHERE id=$assignEng")->fetchColumn()===0, 'Deleting an assignment must remove it.');
 check((int)$pdo->query("SELECT COUNT(*) FROM block_subject_enrollments WHERE assignment_id=$assignEng")->fetchColumn()===0, 'Deleting an assignment must cascade enrollments.');
+
+$pdo->exec('UPDATE students SET year_level=3 WHERE id=3');
+rejected(fn()=>assign_block_student($pdo, $b, 3), 'Assigning a student from another year must fail.');
+$pdo->exec('UPDATE students SET year_level=1 WHERE id=3');
 
 $_SESSION['user'] = ['id'=>2, 'role'=>'admin'];
 $_SERVER['REQUEST_METHOD'] = 'GET';

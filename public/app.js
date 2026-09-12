@@ -51,11 +51,14 @@ root.querySelectorAll('[data-student-form]').forEach((form) => {
   const validateField = (field) => {
     const value = field.value.trim();
     field.setCustomValidity('');
-    if (field.name === 'student_number' && value && !/^[A-Za-z0-9][A-Za-z0-9-]{1,28}[A-Za-z0-9]$/.test(value)) field.setCustomValidity('Student number must be 3–30 characters using letters, numbers, and hyphens.');
+    if (field.name === 'student_number' && value && !/^\d{3,30}$/.test(value)) field.setCustomValidity('Student ID must use numbers only (3–30 digits).');
     if (field.name === 'first_name' && value && !/^[\p{L}][\p{L}\p{M} .,'-]*$/u.test(value)) field.setCustomValidity('First name must use letters and common name punctuation only.');
     if (field.name === 'last_name' && value && !/^[\p{L}][\p{L}\p{M} .,'-]*$/u.test(value)) field.setCustomValidity('Last name must use letters and common name punctuation only.');
     if (field.name === 'phone' && value && !/^[0-9+() -]{7,20}$/.test(value)) field.setCustomValidity('Enter a valid phone number.');
     if (field.name === 'year_level' && value && (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 4)) field.setCustomValidity('College year must be 1st through 4th year.');
+    if (field.name === 'year_level' && form && form.querySelector('[data-enroll-app-type]')?.value === 'new' && value && Number(value) !== 1) {
+      field.setCustomValidity('New students enroll as 1st year. Use Moving up to advance a year.');
+    }
   };
 
   form.querySelectorAll('input').forEach((field) => {
@@ -342,7 +345,7 @@ async function openEditorUrl(url, opener) {
       setModalStatus('Could not open that form. Try again, or refresh the page.');
       console.error(error);
     } else {
-      window.location.assign(url.href);
+    window.location.assign(url.href);
     }
   } finally {
     modalLoading = false;
@@ -382,6 +385,7 @@ document.addEventListener('click', async (event) => {
     || (['blocks','courses','departments'].includes(page) && (url.searchParams.has('add') || url.searchParams.has('edit')))
     || (['assigned_blocks', 'my_subjects', 'student_subjects'].includes(page) && url.searchParams.has('assignment_id'))
     || (page === 'enrollments' && url.searchParams.has('id'))
+    || (page === 'assign_teachers' && url.searchParams.has('teacher') && url.searchParams.has('edit'))
     || (page === 'teachers' && (url.searchParams.has('edit') || url.searchParams.has('add') || url.searchParams.has('assign')))
     || (page === 'users' && url.searchParams.has('add_teacher'));
   if (!isEditor) return;
@@ -470,6 +474,8 @@ document.querySelectorAll('[data-enroll-app-type]').forEach((select) => {
   const courseNew = form.querySelector('[data-enroll-course-new]');
   const courseSecond = form.querySelector('[data-enroll-course-second]');
   const courseCurrent = form.querySelector('[data-enroll-course-current]');
+  const yearSelect = form.querySelector('[data-enroll-year]');
+  const yearHint = form.querySelector('[data-enroll-year-hint]');
 
   const setBlockEnabled = (block, enabled, clearValues) => {
     if (!block) return;
@@ -478,6 +484,32 @@ document.querySelectorAll('[data-enroll-app-type]').forEach((select) => {
       field.disabled = !enabled;
       if (!enabled && clearValues && field.type !== 'hidden') field.value = '';
     });
+  };
+
+  const syncYearOptions = (movingUp) => {
+    if (!yearSelect) return;
+    const labels = {
+      1: '1st year',
+      2: '2nd year',
+      3: '3rd year',
+      4: '4th year',
+    };
+    const current = yearSelect.value || (movingUp ? '2' : '1');
+    yearSelect.innerHTML = '';
+    const years = movingUp ? [2, 3, 4] : [1];
+    years.forEach((y) => {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = labels[y];
+      if (String(y) === String(current)) opt.selected = true;
+      yearSelect.appendChild(opt);
+    });
+    if (!movingUp) {
+      yearSelect.value = '1';
+    } else if (!years.includes(Number(yearSelect.value))) {
+      yearSelect.value = '2';
+    }
+    if (yearHint) yearHint.hidden = movingUp;
   };
 
   const sync = () => {
@@ -530,6 +562,7 @@ document.querySelectorAll('[data-enroll-app-type]').forEach((select) => {
         courseCurrent.value = '';
       }
     }
+    syncYearOptions(movingUp);
   };
   select.addEventListener('change', sync);
   sync();
@@ -646,4 +679,176 @@ document.querySelectorAll('[data-enroll-review]').forEach((form) => {
       if (!window.confirm(msg)) event.preventDefault();
     }
   });
+});
+
+document.querySelectorAll('[data-enroll-form]').forEach((form) => {
+  const namePattern = /^[\p{L}][\p{L}\p{M} .,'-]*$/u;
+  const clearInvalid = (field) => {
+    field.classList.remove('is-invalid');
+    field.removeAttribute('aria-invalid');
+    const wrap = field.closest('.mobile-input-row');
+    wrap?.classList.remove('is-invalid-wrap');
+    const next = field.parentElement?.querySelector('.field-error[data-client-error]');
+    next?.remove();
+    if (wrap) wrap.parentElement?.querySelector('.field-error[data-client-error]')?.remove();
+  };
+  const markInvalid = (field, message) => {
+    field.classList.add('is-invalid');
+    field.setAttribute('aria-invalid', 'true');
+    const wrap = field.closest('.mobile-input-row');
+    wrap?.classList.add('is-invalid-wrap');
+    const host = wrap ? wrap.parentElement : field.parentElement;
+    if (!host) return;
+    let err = host.querySelector('.field-error[data-client-error]');
+    if (!err) {
+      err = document.createElement('p');
+      err.className = 'field-error';
+      err.dataset.clientError = 'true';
+      err.setAttribute('role', 'alert');
+      host.appendChild(err);
+    }
+    err.textContent = message;
+  };
+
+  form.querySelectorAll('[data-enroll-name]').forEach((field) => {
+    field.addEventListener('input', () => {
+      const cleaned = field.value.replace(/[0-9]/g, '');
+      if (cleaned !== field.value) field.value = cleaned;
+      clearInvalid(field);
+    });
+  });
+
+  const mobile = form.querySelector('[data-enroll-mobile]');
+  if (mobile) {
+    mobile.addEventListener('input', () => {
+      mobile.value = mobile.value.replace(/\D+/g, '').slice(0, 10);
+      clearInvalid(mobile);
+    });
+  }
+
+  form.querySelectorAll('input, select, textarea').forEach((field) => {
+    field.addEventListener('change', () => clearInvalid(field));
+  });
+
+  form.addEventListener('submit', (event) => {
+    form.querySelectorAll('.is-invalid').forEach((el) => el.classList.remove('is-invalid'));
+    form.querySelectorAll('.field-error[data-client-error]').forEach((el) => el.remove());
+    form.querySelectorAll('.is-invalid-wrap').forEach((el) => el.classList.remove('is-invalid-wrap'));
+
+    const invalid = [];
+    const requireName = (field, label) => {
+      if (!field || field.disabled) return;
+      const value = field.value.trim();
+      if (!value) {
+        markInvalid(field, `Enter ${label}.`);
+        invalid.push(field);
+        return;
+      }
+      if (!namePattern.test(value)) {
+        markInvalid(field, `${label} must use letters only (no numbers).`);
+        invalid.push(field);
+      }
+    };
+
+    requireName(form.querySelector('#enroll-last'), 'last name');
+    requireName(form.querySelector('#enroll-first'), 'first name');
+    const noMiddle = form.querySelector('[data-no-middle-name]')?.checked;
+    if (!noMiddle) requireName(form.querySelector('#enroll-middle'), 'middle name');
+
+    if (mobile) {
+      const digits = mobile.value.replace(/\D+/g, '');
+      if (!/^\d{10}$/.test(digits)) {
+        markInvalid(mobile, 'Enter exactly 10 digits after 63+ (numbers only).');
+        invalid.push(mobile);
+      } else {
+        mobile.value = digits;
+      }
+    }
+
+    ['enroll-email', 'enroll-sex', 'enroll-civil', 'enroll-citizenship', 'enroll-religion', 'enroll-dob', 'enroll-pob', 'enroll-ename', 'enroll-erel', 'enroll-enum'].forEach((id) => {
+      const field = form.querySelector('#' + id);
+      if (field && field.required && !String(field.value || '').trim()) {
+        markInvalid(field, 'This field is required.');
+        invalid.push(field);
+      }
+    });
+
+    const appType = form.querySelector('[data-enroll-app-type]')?.value;
+    const yearSelect = form.querySelector('[data-enroll-year]');
+    if (appType === 'new' && yearSelect && Number(yearSelect.value) !== 1) {
+      markInvalid(yearSelect, 'New students enroll as 1st year. Use Moving up if you already study here and are advancing.');
+      invalid.push(yearSelect);
+    }
+    if (appType !== 'moving_up') {
+      const school = form.querySelector('#enroll-school');
+      const grad = form.querySelector('#enroll-grad');
+      if (school && !school.disabled && !String(school.value || '').trim()) {
+        markInvalid(school, 'Last school or institution attended is required.');
+        invalid.push(school);
+      }
+      if (grad && !grad.disabled && !String(grad.value || '').trim()) {
+        markInvalid(grad, 'Year graduated / last attended is required.');
+        invalid.push(grad);
+      }
+    }
+
+    const studentId = form.querySelector('[data-enroll-student-id-input]');
+    if (appType === 'moving_up' && studentId && !studentId.disabled) {
+      const sid = studentId.value.trim();
+      if (!sid) {
+        markInvalid(studentId, 'Enter your student ID.');
+        invalid.push(studentId);
+      } else if (!/^\d{3,30}$/.test(sid)) {
+        markInvalid(studentId, 'Student ID must use numbers only (3–30 digits).');
+        invalid.push(studentId);
+      }
+    }
+
+    if (invalid.length) {
+      event.preventDefault();
+      const first = invalid[0];
+      first.focus({ preventScroll: true });
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+
+  const serverInvalid = form.querySelector('.is-invalid');
+  if (serverInvalid) {
+    serverInvalid.focus({ preventScroll: true });
+    serverInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
+
+document.querySelectorAll('select[data-filter-autosubmit]').forEach((select) => {
+  select.addEventListener('change', () => {
+    const form = select.closest('form');
+    if (form) form.requestSubmit();
+  });
+});
+
+document.querySelectorAll('[data-searchable-select]').forEach((wrap) => {
+  const input = wrap.querySelector('[data-searchable-filter]');
+  const select = wrap.querySelector('select[data-searchable-target]');
+  if (!input || !select) return;
+
+  const applyFilter = () => {
+    const q = input.value.trim().toLowerCase();
+    let visible = 0;
+    Array.from(select.options).forEach((opt, index) => {
+      if (index === 0 && opt.value === '') {
+        opt.hidden = false;
+        return;
+      }
+      const match = !q || (opt.textContent || '').toLowerCase().includes(q);
+      opt.hidden = !match;
+      if (match) visible += 1;
+    });
+    if (select.selectedOptions[0]?.hidden) {
+      select.value = '';
+    }
+    input.setAttribute('aria-description', visible === 0 && q ? 'No matching teachers' : '');
+  };
+
+  input.addEventListener('input', applyFilter);
+  input.addEventListener('search', applyFilter);
 });
